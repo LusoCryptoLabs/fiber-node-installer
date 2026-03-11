@@ -1,5 +1,6 @@
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Zap, GitFork, Users, AlertCircle, RefreshCw } from "lucide-react";
+import { Zap, GitFork, Users, AlertCircle, RefreshCw, TrendingUp, Activity, RotateCcw } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { api } from "../api.js";
 import { shannonsToCkb } from "../types.js";
@@ -18,6 +19,18 @@ function CopyButton({ text }: { text: string }) {
       Copy
     </button>
   );
+}
+
+const BALANCE_BASELINE_KEY = "fiber_balance_baseline";
+
+function fmtUptime(startedAt: number): string {
+  const ms = Date.now() - startedAt;
+  const d = Math.floor(ms / 86_400_000);
+  const h = Math.floor((ms % 86_400_000) / 3_600_000);
+  const m = Math.floor((ms % 3_600_000) / 60_000);
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
 }
 
 export default function Overview() {
@@ -44,8 +57,34 @@ export default function Overview() {
     refetchInterval: 30_000,
   });
 
+  const { data: healthData } = useQuery({
+    queryKey: ["health"],
+    queryFn: api.health,
+    refetchInterval: 60_000,
+  });
+
+  // Balance baseline for fee tracking (persisted in localStorage)
+  const [balanceBaseline, setBalanceBaseline] = useState<{ total: string; ts: number } | null>(() => {
+    const stored = localStorage.getItem(BALANCE_BASELINE_KEY);
+    return stored ? JSON.parse(stored) : null;
+  });
+
   const channels = channelsData?.channels ?? [];
-  const readyChannels = channels.filter((c) => c.state.state_name === "ChannelReady");
+  const readyChannels = channels.filter((c: any) => c.state.state_name === "ChannelReady");
+
+  // Fee rate: the millionths of the payment amount your node earns per hop it forwards.
+  // e.g. 100 ppm = 0.01% = earn 1 CKB for every 10,000 CKB routed.
+  const feeRatePpm = nodeInfo
+    ? Number(BigInt(nodeInfo.tlc_fee_proportional_millionths || "0x0"))
+    : 0;
+  const feeRatePct = (feeRatePpm / 10_000).toFixed(4);
+
+  function fmtEarned(volumeCkb: number): string {
+    const earned = (volumeCkb * feeRatePpm) / 1_000_000;
+    if (earned < 0.0001) return "< 0.0001";
+    if (earned < 1) return earned.toFixed(4);
+    return earned.toFixed(2);
+  }
 
   const totalLocal = channels.reduce(
     (sum, ch) => sum + BigInt(ch.local_balance),
@@ -55,6 +94,24 @@ export default function Overview() {
     (sum, ch) => sum + BigInt(ch.remote_balance),
     0n
   );
+
+  // Set balance baseline on first channel load (used to track routing income)
+  useEffect(() => {
+    if (channels.length === 0 || balanceBaseline !== null) return;
+    const baseline = { total: totalLocal.toString(), ts: Date.now() };
+    localStorage.setItem(BALANCE_BASELINE_KEY, JSON.stringify(baseline));
+    setBalanceBaseline(baseline);
+  }, [channels.length]); // eslint-disable-line
+
+  const feesGained = balanceBaseline && channels.length > 0
+    ? totalLocal - BigInt(balanceBaseline.total)
+    : 0n;
+
+  function resetBaseline() {
+    const baseline = { total: totalLocal.toString(), ts: Date.now() };
+    localStorage.setItem(BALANCE_BASELINE_KEY, JSON.stringify(baseline));
+    setBalanceBaseline(baseline);
+  }
 
   const chartData = readyChannels.slice(0, 10).map((ch, i) => ({
     name: `Ch ${i + 1}`,
@@ -141,7 +198,7 @@ export default function Overview() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="stat-card" data-testid="stat-open-channels">
           <GitFork size={18} className="text-accent-green" />
           <div className="stat-value">{loadingChannels ? "…" : readyChannels.length}</div>
@@ -154,8 +211,15 @@ export default function Overview() {
         </div>
         <div className="stat-card" data-testid="stat-local-balance">
           <Zap size={18} className="text-accent-amber" />
-          <div className="stat-value">{shannonsToCkb(totalLocal.toString())} </div>
+          <div className="stat-value">{shannonsToCkb(totalLocal.toString())}</div>
           <div className="stat-label">Local Balance (CKB)</div>
+        </div>
+        <div className="stat-card" data-testid="stat-uptime">
+          <Activity size={18} className="text-accent-green" />
+          <div className="stat-value text-sm">
+            {healthData?.startedAt ? fmtUptime(healthData.startedAt) : "…"}
+          </div>
+          <div className="stat-label">Uptime</div>
         </div>
       </div>
 
@@ -191,6 +255,94 @@ export default function Overview() {
             Total local: {shannonsToCkb(totalLocal.toString())} CKB &nbsp;·&nbsp;
             Total remote: {shannonsToCkb(totalRemote.toString())} CKB
           </div>
+        </div>
+      )}
+
+      {nodeInfo && (
+        <div className="card">
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingUp size={16} className="text-accent-green" />
+            <h2 className="section-title mb-0">Routing Income</h2>
+          </div>
+
+          {/* Fees received tracker */}
+          <div className="bg-bg-surface rounded-md p-3 mb-4">
+            <div className="flex items-center justify-between mb-1">
+              <span className="label mb-0">Fees received since tracking started</span>
+              <button
+                onClick={resetBaseline}
+                className="btn-ghost text-xs flex items-center gap-1"
+                title="Reset tracking baseline to current balance"
+              >
+                <RotateCcw size={11} /> Reset
+              </button>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className={`text-xl font-semibold ${feesGained >= 0n ? "text-accent-green" : "text-accent-red"}`}>
+                {feesGained >= 0n ? "+" : ""}{shannonsToCkb(feesGained.toString())}
+              </span>
+              <span className="text-xs text-gray-500">CKB</span>
+            </div>
+            {balanceBaseline && (
+              <p className="text-xs text-gray-600 mt-1">
+                Tracking since {new Date(balanceBaseline.ts).toLocaleString()} · net balance change across all channels
+              </p>
+            )}
+            <p className="text-xs text-gray-600 mt-1">
+              Note: This reflects net channel balance change — includes routing fees earned and any payments sent/received.
+            </p>
+          </div>
+
+          <p className="text-xs text-gray-400 mb-4">
+            Your node earns a fee on every payment it forwards to another peer. The fee is a
+            percentage of the payment amount, set by your fee rate below.
+          </p>
+          <div className="flex flex-wrap gap-6 mb-4">
+            <div>
+              <span className="label">Your fee rate</span>
+              <span className="text-white font-semibold text-lg">{feeRatePpm} ppm</span>
+              <span className="text-gray-500 text-xs ml-2">({feeRatePct}%)</span>
+            </div>
+            <div>
+              <span className="label">Earning formula</span>
+              <span className="text-gray-300 text-sm">
+                Earned CKB = Volume routed × {feeRatePpm} ÷ 1,000,000
+              </span>
+            </div>
+          </div>
+          {feeRatePpm > 0 ? (
+            <div>
+              <p className="text-xs text-gray-500 mb-2">Estimated earnings at different volumes:</p>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-500 text-xs border-b border-border">
+                    <th className="pb-1 font-normal">CKB routed through your node</th>
+                    <th className="pb-1 font-normal text-right">You earn</th>
+                  </tr>
+                </thead>
+                <tbody className="text-gray-300">
+                  {[1_000, 10_000, 100_000, 1_000_000].map((vol) => (
+                    <tr key={vol} className="border-b border-border/30">
+                      <td className="py-1.5">{vol.toLocaleString()} CKB</td>
+                      <td className="py-1.5 text-right text-accent-green font-medium">
+                        {fmtEarned(vol)} CKB
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="text-xs text-gray-600 mt-3">
+                Note: Fiber {nodeInfo.node_name ? `(${nodeInfo.node_name})` : ""} does not yet expose
+                a cumulative fee counter. Income accumulates passively as traffic flows through your
+                channels — the more open channels and liquidity you have, the more you earn.
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500">
+              Fee rate is 0 ppm — your node forwards payments for free. Go to{" "}
+              <span className="text-accent-green">Channels → Update</span> to set a fee rate.
+            </p>
+          )}
         </div>
       )}
 

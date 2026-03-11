@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Wallet, AlertTriangle, RefreshCw, GitFork, Copy, Check, ExternalLink } from "lucide-react";
+import { Wallet, AlertTriangle, RefreshCw, GitFork, Copy, Check, ExternalLink, Send } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { api } from "../api.js";
+import { api, ApiError } from "../api.js";
 import { shannonsToCkb } from "../types.js";
 
 const SHANNONS_PER_CKB = 100_000_000n;
@@ -22,6 +22,105 @@ function CopyButton({ text }: { text: string }) {
     >
       {copied ? <Check size={14} className="text-accent-green" /> : <Copy size={14} />}
     </button>
+  );
+}
+
+function SendCkbForm({ explorerBase }: { explorerBase: string }) {
+  const [open, setOpen] = useState(false);
+  const [toAddress, setToAddress] = useState('');
+  const [amountCkb, setAmountCkb] = useState('');
+  const [feeCkb, setFeeCkb] = useState('0.001');
+  const [password, setPassword] = useState('');
+  const [sending, setSending] = useState(false);
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function reset() {
+    setToAddress(''); setAmountCkb(''); setFeeCkb('0.001');
+    setPassword(''); setTxHash(null); setError(null);
+  }
+
+  async function handleSend() {
+    setError(null);
+    setSending(true);
+    try {
+      const result = await api.transferCkb({ toAddress: toAddress.trim(), amountCkb: amountCkb.trim(), feeCkb: feeCkb.trim(), password });
+      setTxHash(result.txHash);
+      setPassword('');
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="btn-ghost text-xs flex items-center gap-1 mt-2">
+        <Send size={13} /> Send CKB
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-3 border border-border rounded-lg p-4 space-y-3 bg-bg-surface">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-gray-200">Send CKB</span>
+        <button onClick={() => { reset(); setOpen(false); }} className="btn-ghost p-1 text-xs text-gray-500">✕</button>
+      </div>
+
+      {txHash ? (
+        <div className="space-y-2">
+          <div className="text-xs text-accent-green font-medium">Transfer submitted!</div>
+          <div className="bg-bg-surface border border-border rounded p-2 mono text-xs text-gray-300 break-all">{txHash}</div>
+          <a href={`${explorerBase}/transaction/${txHash}`} target="_blank" rel="noopener noreferrer"
+            className="text-xs text-accent-green hover:underline flex items-center gap-1">
+            View on Explorer <ExternalLink size={11} />
+          </a>
+          <button onClick={() => { reset(); setOpen(false); }} className="btn-ghost text-xs mt-1">Done</button>
+        </div>
+      ) : (
+        <>
+          <div className="space-y-2">
+            <div>
+              <label className="label mb-1 block">Destination Address</label>
+              <input className="input w-full mono text-xs" placeholder="ckb1..." value={toAddress} onChange={e => setToAddress(e.target.value)} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="label mb-1 block">Amount (CKB)</label>
+                <input className="input w-full" type="number" min="61" step="1" placeholder="100" value={amountCkb} onChange={e => setAmountCkb(e.target.value)} />
+              </div>
+              <div>
+                <label className="label mb-1 block">Fee (CKB)</label>
+                <input className="input w-full" type="number" min="0.0001" step="0.0001" placeholder="0.001" value={feeCkb} onChange={e => setFeeCkb(e.target.value)} />
+              </div>
+            </div>
+            <div>
+              <label className="label mb-1 block">Keystore Password</label>
+              <input className="input w-full" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} />
+              <p className="text-xs text-gray-600 mt-1">The password you set when the node was installed.</p>
+            </div>
+          </div>
+
+          {error && (
+            <div className="bg-red-900/20 border border-red-800/40 rounded p-2 text-xs text-red-400 break-all">{error}</div>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={handleSend}
+              disabled={sending || !toAddress || !amountCkb || !feeCkb || !password}
+              className="btn-primary text-xs flex items-center gap-1 disabled:opacity-50"
+            >
+              {sending ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
+              {sending ? 'Sending…' : 'Send'}
+            </button>
+            <button onClick={() => { reset(); setOpen(false); }} className="btn-ghost text-xs">Cancel</button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -138,6 +237,7 @@ export default function WalletPage() {
                   </a>
                 )}
               </div>
+              <SendCkbForm explorerBase={explorerBase} />
             </div>
 
             {/* Balance */}

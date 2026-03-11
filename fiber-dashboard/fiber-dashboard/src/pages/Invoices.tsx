@@ -1,9 +1,18 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { FileText, Copy, RefreshCw, CheckCircle } from "lucide-react";
+import { FileText, Copy, RefreshCw, CheckCircle, XCircle, Clock, Ban } from "lucide-react";
 import { api } from "../api.js";
 import { ckbToShannons, shannonsToCkb } from "../types.js";
 import type { NewInvoiceResult, GetInvoiceResult } from "../types.js";
+
+interface SessionInvoice {
+  payment_hash: string;
+  invoice_address: string;
+  amount: string; // hex shannons
+  description?: string;
+  status: string;
+  createdAt: number;
+}
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -36,12 +45,26 @@ function statusBadge(status: string) {
   }
 }
 
+function StatusIcon({ status }: { status: string }) {
+  switch (status) {
+    case "Paid":
+    case "Received":
+      return <CheckCircle size={16} className="text-accent-green" />;
+    case "Expired":
+      return <Clock size={16} className="text-gray-500" />;
+    case "Cancelled":
+      return <XCircle size={16} className="text-accent-red" />;
+    default:
+      return <RefreshCw size={16} className="text-accent-blue animate-spin" />;
+  }
+}
+
 function InvoiceStatusPoller({
   paymentHash,
-  onPaid,
+  onStatusChange,
 }: {
   paymentHash: string;
-  onPaid: () => void;
+  onStatusChange: (hash: string, status: string) => void;
 }) {
   const { data } = useQuery({
     queryKey: ["invoice", paymentHash],
@@ -55,8 +78,8 @@ function InvoiceStatusPoller({
     },
   });
 
-  if (data && (data.status === "Paid" || data.status === "Received")) {
-    onPaid();
+  if (data) {
+    onStatusChange(paymentHash, data.status);
   }
 
   return null;
@@ -72,6 +95,17 @@ export default function Invoices() {
   const [checkInvoiceStr, setCheckInvoiceStr] = useState("");
   const [parsedInvoice, setParsedInvoice] = useState<GetInvoiceResult | null>(null);
 
+  const [sessionInvoices, setSessionInvoices] = useState<SessionInvoice[]>([]);
+
+  const updateInvoiceStatus = (hash: string, status: string) => {
+    setSessionInvoices((prev) =>
+      prev.map((inv) => (inv.payment_hash === hash ? { ...inv, status } : inv))
+    );
+    if (hash === generatedInvoice?.invoice.data.payment_hash) {
+      if (status === "Paid" || status === "Received") setPaid(true);
+    }
+  };
+
   const createMut = useMutation({
     mutationFn: () =>
       api.createInvoice({
@@ -83,6 +117,17 @@ export default function Invoices() {
     onSuccess: (data) => {
       setGeneratedInvoice(data);
       setPaid(false);
+      const newInv: SessionInvoice = {
+        payment_hash: data.invoice.data.payment_hash,
+        invoice_address: data.invoice_address,
+        amount: data.invoice.amount ?? "0x0",
+        description: description || undefined,
+        status: "Open",
+        createdAt: Date.now(),
+      };
+      setSessionInvoices((prev) => [newInv, ...prev]);
+      setAmountCkb("");
+      setDescription("");
     },
   });
 
@@ -100,13 +145,28 @@ export default function Invoices() {
     },
   });
 
-  const paymentHash = generatedInvoice?.invoice.data.payment_hash;
+  const cancelMut = useMutation({
+    mutationFn: (hash: string) => api.cancelInvoice(hash),
+    onSuccess: (_, hash) => {
+      updateInvoiceStatus(hash, "Cancelled");
+    },
+  });
 
+  const paymentHash = generatedInvoice?.invoice.data.payment_hash;
   const amountAttr = generatedInvoice?.invoice.amount;
+
+  const openHashes = sessionInvoices
+    .filter((inv) => inv.status === "Open")
+    .map((inv) => inv.payment_hash);
 
   return (
     <div className="space-y-6">
       <h1 className="text-xl font-bold text-white">Invoices</h1>
+
+      {/* Poll status for all open invoices in history */}
+      {openHashes.map((hash) => (
+        <InvoiceStatusPoller key={hash} paymentHash={hash} onStatusChange={updateInvoiceStatus} />
+      ))}
 
       <div className="card space-y-4">
         <h2 className="section-title">Create Invoice</h2>
@@ -172,12 +232,6 @@ export default function Invoices() {
           <div className="space-y-3 pt-2 border-t border-border">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-white">Invoice Generated</h3>
-              {paymentHash && (
-                <InvoiceStatusPoller
-                  paymentHash={paymentHash}
-                  onPaid={() => setPaid(true)}
-                />
-              )}
               {paid ? (
                 <span className="badge-green flex items-center gap-1">
                   <CheckCircle size={12} /> Paid!
@@ -198,10 +252,63 @@ export default function Invoices() {
               {amountAttr && (
                 <div>Amount: <span className="text-gray-300">{shannonsToCkb(BigInt(amountAttr).toString())} CKB</span></div>
               )}
-              {generatedInvoice.invoice.data.payment_hash && (
-                <div>Payment hash: <span className="mono text-gray-400">{generatedInvoice.invoice.data.payment_hash.slice(0, 20)}…</span></div>
+              {paymentHash && (
+                <div>Payment hash: <span className="mono text-gray-400">{paymentHash.slice(0, 20)}…</span></div>
               )}
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* Invoice history */}
+      <div className="card">
+        <h2 className="section-title mb-4">This Session's Invoices</h2>
+        {sessionInvoices.length === 0 ? (
+          <div className="text-center py-8 text-gray-500 text-sm">
+            <FileText size={24} className="mx-auto mb-2 text-gray-600" />
+            No invoices created this session yet.
+            <p className="text-xs mt-1 text-gray-600">
+              Note: Fiber doesn't persist invoice history across restarts.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {sessionInvoices.map((inv) => (
+              <div
+                key={inv.payment_hash}
+                className="flex items-start gap-3 p-3 bg-bg-surface rounded-md"
+              >
+                <StatusIcon status={inv.status} />
+                <div className="flex-1 min-w-0 space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {statusBadge(inv.status)}
+                    <span className="text-sm text-white font-medium">
+                      {shannonsToCkb(BigInt(inv.amount).toString())} CKB
+                    </span>
+                    {inv.description && (
+                      <span className="text-xs text-gray-400 italic">"{inv.description}"</span>
+                    )}
+                  </div>
+                  <div className="mono text-xs text-gray-500 truncate">{inv.payment_hash}</div>
+                  <div className="text-xs text-gray-600">
+                    {new Date(inv.createdAt).toLocaleTimeString()}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <CopyButton text={inv.invoice_address} />
+                  {inv.status === "Open" && (
+                    <button
+                      onClick={() => cancelMut.mutate(inv.payment_hash)}
+                      disabled={cancelMut.isPending}
+                      className="btn-ghost text-xs flex items-center gap-1 text-accent-red"
+                      title="Cancel invoice"
+                    >
+                      <Ban size={12} /> Cancel
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

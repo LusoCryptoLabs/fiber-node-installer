@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
 #  Scryve Fiber Node Installer
 #  Installs and configures a Fiber Network Node (fnn) on Ubuntu/Debian.
@@ -79,8 +79,13 @@ error() {
 }
 
 step() {
+  local label="  Step $1: $2"
+  local bar
+  bar=$(python3 -c "print('─' * ${#label})" 2>/dev/null || printf '─%.0s' $(seq 1 50))
   echo ""
-  echo -e "${BOLD}${CYAN}── Step $1: $2 ──────────────────────────────────────${RESET}"
+  echo -e "  ${CYAN}${bar}${RESET}"
+  echo -e "  ${CYAN}Step ${BOLD}$1${RESET}${CYAN}  —  ${BOLD}$2${RESET}"
+  echo -e "  ${CYAN}${bar}${RESET}"
   echo ""
 }
 
@@ -179,7 +184,7 @@ preflight() {
   print_banner
 
   echo -e "  This installer will set up a ${BOLD}Fiber Network Node${RESET} on your server."
-  echo "  Fiber is CKB's Layer 2 payment network — it lets Scryve send instant,"
+  echo "  Fiber is CKB's Layer 2 payment network - it lets Scryve send instant,"
   echo "  near-free payments without waiting for a blockchain transaction every time."
   echo ""
   echo "  The installer will:"
@@ -276,11 +281,11 @@ preflight() {
 select_network() {
   step "1" "Choose Your Network"
 
-  explain "Mainnet is the live CKB network where real funds are used. Testnet is for testing with fake CKB — great for trying things out before committing real funds."
+  explain "Mainnet is the live CKB network where real funds are used. Testnet is for testing with fake CKB - great for trying things out before committing real funds."
 
   echo "  Which network do you want to run on?"
-  echo "    1) Mainnet  — real CKB, real payments (recommended for production)"
-  echo "    2) Testnet  — test CKB only, safe to experiment"
+  echo "    1) Mainnet  - real CKB, real payments (recommended for production)"
+  echo "    2) Testnet  - test CKB only, safe to experiment"
   echo ""
 
   while true; do
@@ -311,7 +316,7 @@ select_network() {
 get_node_config() {
   step "2" "Node Identity"
 
-  explain "Your node needs to announce its public IP address so other Fiber nodes on the network can connect to it. It also needs a friendly name (alias) — this is just a label visible in the network."
+  explain "Your node needs to announce its public IP address so other Fiber nodes on the network can connect to it. It also needs a friendly name (alias) - this is just a label visible in the network."
 
   echo "  Trying to detect your public IP automatically..."
   AUTO_IP=""
@@ -348,7 +353,7 @@ get_node_config() {
 setup_firewall() {
   step "3" "Firewall Setup"
 
-  explain "The Fiber p2p port (8228) must be open so other nodes can connect to yours. The RPC port (8227) must be CLOSED to the internet — it controls your funds and should only be accessible locally."
+  explain "The Fiber p2p port (8228) must be open so other nodes can connect to yours. The RPC port (8227) must be CLOSED to the internet - it controls your funds and should only be accessible locally."
 
   if ! check_command ufw; then
     warn "ufw is not installed. Attempting to install..."
@@ -370,7 +375,7 @@ setup_firewall() {
     ok "Fiber RPC (port 8227): blocked from internet"
 
     echo ""
-    warn "About to enable the firewall. Make sure SSH (port 22) is allowed (it is — we just set it)."
+    warn "About to enable the firewall. Make sure SSH (port 22) is allowed (it is - we just set it)."
     if confirm "Enable firewall now?"; then
       sudo ufw --force enable
       ok "Firewall enabled."
@@ -427,7 +432,7 @@ install_ckb_cli() {
 install_fnn() {
   step "5" "Download Fiber Node Binary (fnn)"
 
-  explain "The Fiber Network Node (fnn) is the actual node software. It runs as a background process and manages your payment channels. It's a single binary — no complex installation needed."
+  explain "The Fiber Network Node (fnn) is the actual node software. It runs as a background process and manages your payment channels. It's a single binary - no complex installation needed."
 
   mkdir -p "$INSTALL_DIR"
   mkdir -p "$INSTALL_DIR/ckb"
@@ -442,7 +447,7 @@ install_fnn() {
 
   info "Downloading fnn ${FNN_VERSION}..."
 
-  # fnn is a single binary for both networks — the network is determined by config.yml.
+  # fnn is a single binary for both networks - the network is determined by config.yml.
   FNN_URL="$MAINNET_FNN_URL"
 
   TMPDIR_FNN=$(mktemp -d)
@@ -471,7 +476,13 @@ install_fnn() {
 write_config() {
   step "6" "Download Node Configuration"
 
-  explain "We'll fetch the official config for fnn ${FNN_VERSION} directly from the Fiber repository — this ensures script hashes and bootnodes are always correct for your installed version — then patch it with your settings."
+  explain "We'll fetch the official config for fnn ${FNN_VERSION} directly from the Fiber repository - this ensures script hashes and bootnodes are always correct for your installed version - then patch it with your settings."
+
+  # Stop the node before overwriting config to avoid file-lock conflicts on re-run
+  if systemctl is-active --quiet fiber-node 2>/dev/null; then
+    info "Stopping running node before updating config..."
+    sudo systemctl stop fiber-node
+  fi
 
   if [[ -f "$INSTALL_DIR/config.yml" ]]; then
     warn "config.yml already exists at $INSTALL_DIR/config.yml"
@@ -498,7 +509,7 @@ write_config() {
   fi
 
   if [[ "$DOWNLOADED" == false ]]; then
-    warn "Could not download official config — using built-in defaults."
+    warn "Could not download official config - using built-in defaults."
     rm -f "$INSTALL_DIR/config.yml"
     if [[ "$NETWORK" == "mainnet" ]]; then
       cat > "$INSTALL_DIR/config.yml" << 'EOF'
@@ -510,7 +521,7 @@ fiber:
   announce_listening_addr: true
   announced_addrs:
     - "/ip4/__VPS_IP__/tcp/8228"
-  node_name: "__NODE_ALIAS__"
+  announced_node_name: "__NODE_ALIAS__"
   chain: mainnet
   private_key_path: "ckb/key"
   scripts:
@@ -566,7 +577,7 @@ fiber:
   announce_listening_addr: true
   announced_addrs:
     - "/ip4/__VPS_IP__/tcp/8228"
-  node_name: "__NODE_ALIAS__"
+  announced_node_name: "__NODE_ALIAS__"
   chain: testnet
   private_key_path: "ckb/key"
   scripts:
@@ -630,23 +641,22 @@ path, vps_ip, node_alias = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(path) as f:
     c = f.read()
 
-# private_key_path — ensure it points to ckb/key relative to the install dir
+# private_key_path - ensure it points to ckb/key relative to the install dir
 c = re.sub(r'(private_key_path:\s*).*', r'\1"ckb/key"', c)
 
-# node_name — replace if present, otherwise insert after the first listening_addr line
-if re.search(r'^\s+node_name:', c, re.MULTILINE):
-    c = re.sub(r'^(\s+node_name:\s*).*', rf'\g<1>"{node_alias}"', c, flags=re.MULTILINE)
-else:
-    c = re.sub(r'^(\s+listening_addr:.*\n)', rf'\1  node_name: "{node_alias}"\n', c, flags=re.MULTILINE, count=1)
+# announced_node_name - strip ALL existing occurrences first, then insert exactly one
+# after the first listening_addr line (avoids duplicates regardless of what the official config contains)
+c = re.sub(r'\n[ \t]+announced_node_name:[^\n]*', '', c)
+c = re.sub(r'([ \t]*listening_addr:[^\n]*)', rf'\1\n  announced_node_name: "{node_alias}"', c, count=1)
 
-# announced_addrs — replace whatever value is there (empty list, existing IPs, etc.)
+# announced_addrs - replace whatever value is there (empty list, existing IPs, etc.)
 c = re.sub(
     r'(\s+announced_addrs:).*?(?=\n\s+\w|\nrpc:|\Z)',
     rf'\1\n    - "/ip4/{vps_ip}/tcp/8228"',
     c, flags=re.DOTALL
 )
 
-# rpc listening_addr — ensure it's localhost only (never exposed to internet)
+# rpc listening_addr - ensure it's localhost only (never exposed to internet)
 c = re.sub(
     r'(^rpc:\n(?:[ \t]+.*\n)*?[ \t]+listening_addr:)[ \t]*.*',
     r'\1 "127.0.0.1:8227"',
@@ -656,6 +666,31 @@ c = re.sub(
 with open(path, 'w') as f:
     f.write(c)
 PYEOF
+
+  # Whitelist BEAF xUDT token for mainnet nodes
+  if [[ "$NETWORK" == "mainnet" ]] && ! grep -q 'udt_cfg_infos' "$INSTALL_DIR/config.yml" 2>/dev/null; then
+    python3 - "$INSTALL_DIR/config.yml" << 'BEAFEOF'
+import sys, re
+path = sys.argv[1]
+with open(path) as f:
+    c = f.read()
+beaf = """  udt_cfg_infos:
+    - name: "BEAF"
+      symbol: "BEAF"
+      decimal: 0
+      auto_accept_channel_ckb_funding_amount: "0x0"
+      script:
+        code_hash: "0x50bd8d6680b8b9cf98b73f3c08faf8b2a21914311954118ad6609be6e78a1b95"
+        hash_type: "data1"
+        args: "0xc639759e988445217e4c08b2e7b416082d9de0cb061194e2f7f35a89bb6fbf4f"
+
+"""
+c = re.sub(r'^rpc:', beaf + 'rpc:', c, count=1, flags=re.MULTILINE)
+with open(path, 'w') as f:
+    f.write(c)
+BEAFEOF
+    ok "BEAF token whitelisted for UDT payments."
+  fi
 
   ok "Config written to $INSTALL_DIR/config.yml"
   info "Review with: cat $INSTALL_DIR/config.yml"
@@ -668,7 +703,7 @@ PYEOF
 generate_wallet() {
   step "7" "Generate Node Wallet"
 
-  explain "Your Fiber node needs a CKB wallet — this is the account that holds the CKB used to open payment channels. The private key is generated on your server and never leaves it."
+  explain "Your Fiber node needs a CKB wallet - this is the account that holds the CKB used to open payment channels. The private key is generated on your server and never leaves it."
 
   if [[ -f "$INSTALL_DIR/ckb/key" ]]; then
     ok "A key file already exists at $INSTALL_DIR/ckb/key"
@@ -712,9 +747,11 @@ generate_wallet() {
     prompt_value LOCK_ARG "Paste your lock_arg (starts with 0x) from the output above"
   fi
 
-  # Export with retry — wrong keystore password is recoverable
+  # Export with retry — cap at 3 attempts
+  EXPORT_ATTEMPTS=0
   while true; do
-    info "Exporting private key — enter your keystore password when prompted..."
+    EXPORT_ATTEMPTS=$((EXPORT_ATTEMPTS + 1))
+    info "Exporting private key - enter your keystore password when prompted..."
     rm -f "${INSTALL_DIR}/ckb/exported-key"
     ckb-cli account export \
       --lock-arg "${LOCK_ARG}" \
@@ -722,7 +759,11 @@ generate_wallet() {
     if [[ -f "${INSTALL_DIR}/ckb/exported-key" ]]; then
       break
     fi
-    warn "Export failed — wrong keystore password? Please try again."
+    if [[ $EXPORT_ATTEMPTS -ge 3 ]]; then
+      error "Export failed after 3 attempts. Re-run the installer with the correct keystore password."
+      exit 1
+    fi
+    warn "Export failed - wrong keystore password? Please try again ($EXPORT_ATTEMPTS/3)."
   done
 
   # Extract only the first line (the actual private key)
@@ -776,7 +817,7 @@ test_node() {
 
   echo ""
   echo "  Choose a strong password. You'll need this to start the node."
-  echo "  Store it somewhere safe — without it, you can't restart the node."
+  echo "  Store it somewhere safe - without it, you can't restart the node."
   echo ""
   prompt_password NODE_PASSWORD "Node password"
 
@@ -818,7 +859,7 @@ test_node() {
     NODE_ALIAS_CONFIRMED=$(echo "$RPC_TEST" | grep -oP '"node_name"\s*:\s*"\K[^"]+' || echo "$NODE_ALIAS")
     ok "Node alias confirmed: $NODE_ALIAS_CONFIRMED"
   else
-    warn "RPC test didn't get a response — the node may need more time to start."
+    warn "RPC test didn't get a response - the node may need more time to start."
     warn "This is sometimes normal on first run. The systemd service will handle retries."
     info "If you continue to have issues, check logs with: journalctl -u fiber-node -f"
   fi
@@ -831,7 +872,7 @@ test_node() {
 setup_systemd() {
   step "9" "Set Up Background Service"
 
-  explain "We'll set up the Fiber node as a systemd service. This means it starts automatically when your server boots, and restarts itself if it ever crashes — so you don't have to babysit it."
+  explain "We'll set up the Fiber node as a systemd service. This means it starts automatically when your server boots, and restarts itself if it ever crashes - so you don't have to babysit it."
 
   SERVICE_FILE="/etc/systemd/system/fiber-node.service"
 
@@ -878,10 +919,10 @@ EOF
 
   echo ""
   info "Useful commands:"
-  echo "    sudo systemctl status fiber-node     — check if running"
-  echo "    sudo systemctl stop fiber-node       — stop the node"
-  echo "    sudo systemctl restart fiber-node    — restart the node"
-  echo "    sudo journalctl -u fiber-node -f     — watch live logs"
+  echo "    sudo systemctl status fiber-node     - check if running"
+  echo "    sudo systemctl stop fiber-node       - stop the node"
+  echo "    sudo systemctl restart fiber-node    - restart the node"
+  echo "    sudo journalctl -u fiber-node -f     - watch live logs"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -891,7 +932,7 @@ EOF
 first_channel_guide() {
   step "10" "Open Your First Channel"
 
-  explain "A Fiber channel is like a two-way payment pipe between your node and another node. You put CKB into it when you open it, and that becomes your 'outbound liquidity' — how much you can send. You need at least one open channel before payments can flow."
+  explain "A Fiber channel is like a two-way payment pipe between your node and another node. You put CKB into it when you open it, and that becomes your 'outbound liquidity' - how much you can send. You need at least one open channel before payments can flow."
 
   echo ""
   if [[ "$NETWORK" == "mainnet" ]]; then
@@ -908,7 +949,7 @@ first_channel_guide() {
     echo "    public: true"
     echo -e "  });${RESET}"
     echo ""
-    echo "  Or use the Fiber Dashboard (if installed) — Peers tab → Quick Connect,"
+    echo "  Or use the Fiber Dashboard (if installed) - Peers tab → Quick Connect,"
     echo "  then Channels tab → Open Channel."
   else
     echo "  On testnet, connect to the testnet bootnode and open a channel with some test CKB."
@@ -927,14 +968,14 @@ first_channel_guide() {
 install_dashboard_prompt() {
   step "11" "Fiber Dashboard (Optional)"
 
-  explain "The Fiber Dashboard is a web UI that lets you manage your node visually — see channels, send payments, create invoices, and monitor your node health. It runs locally on port 3001 (localhost only — no authentication, so it is not exposed to the internet)."
+  explain "The Fiber Dashboard is a web UI that lets you manage your node visually - see channels, send payments, create invoices, and monitor your node health. It runs locally on port 3001 (localhost only - no authentication, so it is not exposed to the internet)."
 
   if ! confirm "Install the Fiber Dashboard?"; then
     info "Dashboard skipped. Re-run the installer to add it later."
     return
   fi
 
-  # Locate the dashboard source folder — expected next to this installer script.
+  # Locate the dashboard source folder - expected next to this installer script.
   # The outer folder contains both ckb-fiber/ (the RPC client) and fiber-dashboard/ (the app).
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   DASHBOARD_OUTER=""
@@ -949,10 +990,27 @@ install_dashboard_prompt() {
   done
 
   if [[ -z "$DASHBOARD_OUTER" ]]; then
-    warn "Dashboard source not found."
-    info "Expected the fiber-dashboard/ folder next to this installer script."
-    info "Copy the fiber-dashboard/ folder to this server, then re-run the installer."
-    return
+    info "Dashboard source not found locally — downloading from GitHub..."
+    DASH_ZIP=$(mktemp)
+    DASH_EXTRACT=$(mktemp -d)
+    DASH_URL="https://github.com/tecmeup123/fiber-node-installer/archive/refs/heads/master.zip"
+    if curl -sSfL "$DASH_URL" -o "$DASH_ZIP" 2>/dev/null || \
+       wget -qO  "$DASH_ZIP" "$DASH_URL" 2>/dev/null; then
+      python3 -c "import zipfile, sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$DASH_ZIP" "$DASH_EXTRACT"
+      rm -f "$DASH_ZIP"
+      CANDIDATE="$DASH_EXTRACT/fiber-node-installer-master/fiber-dashboard"
+      if [[ -f "$CANDIDATE/fiber-dashboard/package.json" ]]; then
+        DASHBOARD_OUTER="$CANDIDATE"
+        ok "Dashboard source downloaded."
+      else
+        warn "Downloaded archive did not contain expected dashboard files. Skipping dashboard."
+        rm -rf "$DASH_EXTRACT"
+        return
+      fi
+    else
+      warn "Could not download dashboard source. Skipping dashboard."
+      return
+    fi
   fi
 
   ok "Dashboard source found: $DASHBOARD_OUTER"
@@ -980,7 +1038,7 @@ install_dashboard_prompt() {
   fi
 
   info "Copying dashboard files to $DASHBOARD_DEST..."
-  # Copy the outer folder — it contains ckb-fiber/ AND fiber-dashboard/ (inner app).
+  # Copy the outer folder - it contains ckb-fiber/ AND fiber-dashboard/ (inner app).
   # The inner app's server imports ../../ckb-fiber, which resolves correctly once copied.
   cp -r "$DASHBOARD_OUTER" "$DASHBOARD_DEST"
   ok "Dashboard files copied."
@@ -990,13 +1048,14 @@ install_dashboard_prompt() {
 
   info "Installing npm dependencies (this may take a minute)..."
   cd "$DASHBOARD_APP"
-  npm install 2>&1 | tail -5
+  npm install >/dev/null 2>&1
+  ok "npm dependencies installed."
 
   info "Building dashboard frontend..."
-  npm run build 2>&1 | tail -5
-  ok "Dashboard built."
+  npm run build >/dev/null 2>&1
+  ok "Dashboard frontend built."
 
-  # Create systemd service — tsx runs the TypeScript server directly.
+  # Create systemd service - tsx runs the TypeScript server directly.
   # Binds to 127.0.0.1 only; use an SSH tunnel for remote access.
   cat > /tmp/fiber-dashboard.service << EOF2
 [Unit]
@@ -1034,7 +1093,7 @@ EOF2
     echo ""
     echo "  Access:  http://localhost:3001"
     echo ""
-    warn "The dashboard has NO login protection — do NOT expose port 3001 to the internet."
+    warn "The dashboard has NO login protection - do NOT expose port 3001 to the internet."
     info "For remote access, use an SSH tunnel from your own computer:"
     echo "    ssh -L 3001:localhost:3001 ${SYSTEMD_USER}@${VPS_IP}"
     echo "  Then open http://localhost:3001 in your browser."
@@ -1078,16 +1137,16 @@ print_summary() {
   fi
   echo -e "  ${BOLD}Key management commands:${RESET}"
   echo ""
-  echo "    sudo systemctl status fiber-node        — is the node running?"
-  echo "    sudo systemctl restart fiber-node       — restart after config changes"
-  echo "    sudo journalctl -u fiber-node -f        — watch live logs"
+  echo "    sudo systemctl status fiber-node        - is the node running?"
+  echo "    sudo systemctl restart fiber-node       - restart after config changes"
+  echo "    sudo journalctl -u fiber-node -f        - watch live logs"
   echo ""
   echo -e "  ${BOLD}Connect Scryve to this node:${RESET}"
   echo ""
   echo "    Add this to your Replit Secrets:"
   echo "      FIBER_NODE_URL=http://${VPS_IP}:8227"
   echo ""
-  echo "    (Secure the connection with an SSH tunnel in production — see FIBER-NODE-SETUP.md)"
+  echo "    (Secure the connection with an SSH tunnel in production - see FIBER-NODE-SETUP.md)"
   echo ""
   echo -e "  ${BOLD}Next steps:${RESET}"
   echo ""
@@ -1102,6 +1161,115 @@ print_summary() {
   echo ""
   echo -e "  ${BOLD}${GREEN}Good luck with your node!${RESET}"
   echo ""
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Step 12: Auto-update (Optional)
+# ─────────────────────────────────────────────────────────────────────────────
+
+install_auto_updater() {
+  step "12" "Auto-Update (Optional)"
+
+  explain "We'll write an update.sh script to your install directory and schedule it weekly (Sunday 3 AM via cron). It checks GitHub for a new fnn release, swaps the binary, and restarts the node. All activity is logged to update.log."
+
+  if ! confirm "Enable weekly auto-update for fnn?"; then
+    info "Auto-update skipped. Re-run this installer to enable it later."
+    return
+  fi
+
+  # Write the updater using a quoted heredoc so bash variables like $LATEST are
+  # written literally. __INSTALL_DIR__ is substituted with the real path via sed.
+  cat > "$INSTALL_DIR/update.sh" << 'UPDATEEOF'
+#!/usr/bin/env bash
+# Fiber Network Node auto-updater - generated by install-fiber.sh
+
+INSTALL_DIR="__INSTALL_DIR__"
+LOG_FILE="$INSTALL_DIR/update.log"
+
+log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$LOG_FILE"; }
+
+log "Checking for fnn update..."
+
+LATEST=$(curl -sSf https://api.github.com/repos/nervosnetwork/fiber/releases/latest 2>/dev/null \
+    | grep '"tag_name"' | sed 's/.*"tag_name": *"\(.*\)".*/\1/')
+
+if [[ -z "$LATEST" ]]; then
+    log "ERROR: Could not fetch latest release info. Check internet connection."
+    exit 1
+fi
+
+VER_RAW=$("$INSTALL_DIR/fnn" --version 2>/dev/null | head -1 || true)
+CURRENT=$(echo "$VER_RAW" | grep -oP 'v?\d+\.\d+\.\d+' | head -1 || echo "")
+[[ -n "$CURRENT" && "$CURRENT" != v* ]] && CURRENT="v$CURRENT"
+[[ -z "$CURRENT" ]] && CURRENT="unknown"
+
+log "Current: $CURRENT | Latest: $LATEST"
+
+if [[ "$CURRENT" == "$LATEST" ]]; then
+    log "Already up to date - nothing to do."
+    exit 0
+fi
+
+log "New release available: $CURRENT -> $LATEST"
+
+FNN_URL="https://github.com/nervosnetwork/fiber/releases/download/${LATEST}/fnn_${LATEST}_x86_64-unknown-linux-gnu.tar.gz"
+UPDATE_TMPDIR=$(mktemp -d)
+cleanup() { rm -rf "$UPDATE_TMPDIR"; }
+trap cleanup EXIT
+
+log "Downloading $FNN_URL..."
+DOWNLOADED=false
+if curl -sSfL "$FNN_URL" -o "$UPDATE_TMPDIR/fnn.tar.gz" 2>/dev/null; then
+    DOWNLOADED=true
+elif wget -qO "$UPDATE_TMPDIR/fnn.tar.gz" "$FNN_URL" 2>/dev/null; then
+    DOWNLOADED=true
+fi
+
+if [[ "$DOWNLOADED" == false ]]; then
+    log "ERROR: Download failed."
+    exit 1
+fi
+
+tar xzf "$UPDATE_TMPDIR/fnn.tar.gz" -C "$UPDATE_TMPDIR"
+NEW_BIN=$(find "$UPDATE_TMPDIR" -name "fnn" -type f | head -1)
+if [[ -z "$NEW_BIN" ]]; then
+    log "ERROR: fnn binary not found in downloaded archive."
+    exit 1
+fi
+
+log "Stopping fiber-node service..."
+sudo systemctl stop fiber-node 2>/dev/null || true
+sleep 3
+
+mv "$NEW_BIN" "$INSTALL_DIR/fnn"
+chmod +x "$INSTALL_DIR/fnn"
+log "Binary replaced with $LATEST"
+
+sudo systemctl start fiber-node 2>/dev/null || true
+sleep 5
+
+STATUS=$(sudo systemctl is-active fiber-node 2>/dev/null || echo "unknown")
+if [[ "$STATUS" == "active" ]]; then
+    log "Service restarted OK."
+else
+    log "WARNING: Service status=$STATUS - check: sudo journalctl -u fiber-node"
+fi
+
+log "Done: fnn updated to $LATEST"
+UPDATEEOF
+
+  # Bake in the actual install path
+  sed -i "s|__INSTALL_DIR__|$INSTALL_DIR|g" "$INSTALL_DIR/update.sh"
+  chmod +x "$INSTALL_DIR/update.sh"
+  ok "update.sh written to $INSTALL_DIR/update.sh"
+
+  # Register a weekly cron job (every Sunday at 03:00)
+  CRON_LINE="0 3 * * 0 $INSTALL_DIR/update.sh >> $INSTALL_DIR/update.log 2>&1"
+  # Remove any previous fiber update entry, then add fresh
+  ( crontab -l 2>/dev/null | grep -v 'fiber-node.*update\.sh'; echo "$CRON_LINE" ) | crontab -
+  ok "Auto-update scheduled - every Sunday at 3:00 AM."
+  info "To update manually: $INSTALL_DIR/update.sh"
+  info "Update log:         $INSTALL_DIR/update.log"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1121,6 +1289,7 @@ main() {
   setup_systemd
   first_channel_guide
   install_dashboard_prompt
+  install_auto_updater
   print_summary
 }
 

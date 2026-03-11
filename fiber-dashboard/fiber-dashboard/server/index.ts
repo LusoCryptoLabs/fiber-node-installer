@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { spawn } from "child_process";
 import { FiberClient, FiberRpcException } from "../../ckb-fiber/index.js";
 
 // ── Bech32m encoding for CKB address derivation (RFC 0021 full format) ────────
@@ -64,6 +65,28 @@ const MAINNET_CHAIN_HASH = '0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Path to ckb-cli.exe — baked in by installer via CKB_CLI_PATH env var.
+// Fallback: three directories up from server/ (i.e. $InstallDir/ckb-cli.exe).
+const CKB_CLI_PATH = process.env.CKB_CLI_PATH ?? join(__dirname, '../../../ckb-cli.exe');
+
+// Run ckb-cli with the given args, writing stdinInput to its stdin if provided.
+function runCkbCli(args: string[], stdinInput: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(CKB_CLI_PATH, args);
+    let out = '';
+    let err = '';
+    child.stdout.on('data', (d: Buffer) => { out += d.toString(); });
+    child.stderr.on('data', (d: Buffer) => { err += d.toString(); });
+    child.on('close', (code: number | null) => {
+      if (code === 0) resolve(out + err);
+      else reject(new Error(err.trim() || out.trim() || `ckb-cli exited with code ${code}`));
+    });
+    child.on('error', reject);
+    child.stdin.write(stdinInput + '\n');
+    child.stdin.end();
+  });
+}
+
 const app = express();
 const PORT      = process.env.PORT      ? parseInt(process.env.PORT) : 3001;
 const BIND_HOST = process.env.BIND_HOST ?? "127.0.0.1";
@@ -71,6 +94,7 @@ const FIBER_RPC_URL = process.env.FIBER_RPC_URL ?? "http://localhost:8227";
 const IS_PROD = process.env.NODE_ENV === "production";
 
 const fiber = new FiberClient(FIBER_RPC_URL);
+const SERVER_STARTED_AT = Date.now();
 
 app.use(cors());
 app.use(express.json());
@@ -91,7 +115,7 @@ function handleError(res: express.Response, err: unknown) {
 }
 
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, timestamp: Date.now(), fiberRpcUrl: FIBER_RPC_URL });
+  res.json({ ok: true, timestamp: Date.now(), fiberRpcUrl: FIBER_RPC_URL, startedAt: SERVER_STARTED_AT });
 });
 
 app.get("/api/node-info", async (_req, res) => {
@@ -275,6 +299,51 @@ app.get("/api/wallet", async (_req, res) => {
     res.json({ address, capacity, isMainnet, ckbRpcUrl });
   } catch (err) {
     handleError(res, err);
+  }
+});
+
+app.post("/api/wallet/transfer", async (req, res) => {
+  try {
+    const { toAddress, amountCkb, feeCkb, password } = req.body as {
+      toAddress: string; amountCkb: string; feeCkb: string; password: string;
+    };
+    if (!toAddress || !amountCkb || !feeCkb || !password) {
+      res.status(400).json({ error: "Missing required fields: toAddress, amountCkb, feeCkb, password" });
+      return;
+    }
+
+    // Derive lock_arg and network from node info
+    const info = await fiber.getNodeInfo();
+    const lockScript = (info as unknown as Record<string, unknown>)["default_funding_lock_script"] as {
+      code_hash: string; hash_type: string; args: string;
+    } | undefined;
+    if (!lockScript) {
+      res.status(400).json({ error: "Node did not return default_funding_lock_script" });
+      return;
+    }
+
+    const isMainnet = info.chain_hash === MAINNET_CHAIN_HASH;
+    const ckbRpcUrl = isMainnet ? "https://mainnet.ckbapp.dev/" : "https://testnet.ckbapp.dev/";
+
+    // ckb-cli prompts for password on stdin
+    const output = await runCkbCli([
+      "wallet", "transfer",
+      "--url", ckbRpcUrl,
+      "--from-account", lockScript.args,
+      "--to-address", toAddress,
+      "--capacity", amountCkb,
+      "--tx-fee", feeCkb,
+    ], password);
+
+    const txHashMatch = output.match(/0x[0-9a-fA-F]{64}/);
+    if (!txHashMatch) {
+      res.status(500).json({ error: output.trim() || "Transfer failed — no transaction hash returned" });
+      return;
+    }
+
+    res.json({ txHash: txHashMatch[0] });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error during transfer" });
   }
 });
 

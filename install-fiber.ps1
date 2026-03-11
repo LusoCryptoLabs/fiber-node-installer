@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Fiber Network Node installer / uninstaller for Windows
 
@@ -17,13 +17,28 @@ param(
     [switch]$Uninstall
 )
 
-# constants
-$FNN_VERSION       = 'v0.7.1'
-$CKB_CLI_VERSION   = 'v1.9.0'
+Add-Type -AssemblyName System.Net.Http
+
+# Resolve latest release versions from GitHub API (fallback to known-good if offline)
+function Get-LatestRelease([string]$repo, [string]$fallback) {
+    try {
+        $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/latest" `
+            -UseBasicParsing -TimeoutSec 8 -ErrorAction Stop
+        if ($rel.tag_name) { return $rel.tag_name }
+    } catch {}
+    Write-Warn "Could not fetch latest $repo release — using fallback $fallback"
+    return $fallback
+}
+
+$FNN_VERSION     = Get-LatestRelease 'nervosnetwork/fiber'  'v0.7.1'
+$CKB_CLI_VERSION = Get-LatestRelease 'nervosnetwork/ckb-cli' 'v1.9.0'
 
 $FnnUrl    = "https://github.com/nervosnetwork/fiber/releases/download/$FNN_VERSION/fnn_${FNN_VERSION}-x86_64-windows.tar.gz"
 $CkbCliUrl = "https://github.com/nervosnetwork/ckb-cli/releases/download/$CKB_CLI_VERSION/ckb-cli_${CKB_CLI_VERSION}_x86_64-pc-windows-msvc.zip"
 $NssmUrl   = "https://nssm.cc/release/nssm-2.24.zip"
+
+# Prefer PowerShell 7 (pwsh) when available, fall back to Windows PowerShell 5
+$PS = if (Get-Command pwsh -ErrorAction SilentlyContinue) { 'pwsh' } else { 'powershell' }
 
 # state
 $InstallDir        = "$env:USERPROFILE\fiber-node"
@@ -39,14 +54,41 @@ function Write-Ok   { param($msg) Write-Host "✓  $msg" -ForegroundColor Green 
 function Write-Warn { param($msg) Write-Host "⚠  $msg" -ForegroundColor Yellow }
 function Write-Err  { param($msg) Write-Host "✗  ERROR: $msg" -ForegroundColor Red }
 
+function Read-MaskedInput {
+    param([string]$Prompt)
+    Write-Host -NoNewline ($Prompt + ': ')
+    $chars = New-Object System.Collections.ArrayList
+    while ($true) {
+        $key = [Console]::ReadKey($true)
+        if ($key.Key -eq 'Enter') { break }
+        if ($key.Key -eq 'Backspace') {
+            if ($chars.Count -gt 0) {
+                $chars.RemoveAt($chars.Count - 1)
+                Write-Host -NoNewline "`b `b"
+            }
+        } else {
+            [void]$chars.Add($key.KeyChar)
+            Write-Host -NoNewline '*'
+        }
+    }
+    Write-Host ''
+    return ($chars -join '')
+}
+
 $script:StepTotal = 10
 $script:StepCurrent = 0
 function Show-Step {
     param([string]$Name)
     $script:StepCurrent++
-    Write-Progress -Id 1 -Activity 'Fiber Node Setup' `
-        -Status "Step $script:StepCurrent of $script:StepTotal  —  $Name" `
-        -PercentComplete ([int]($script:StepCurrent / $script:StepTotal * 100))
+    $label = "  Step $script:StepCurrent/$script:StepTotal  —  $Name  "
+    $bar   = '─' * ($label.Length)
+    Write-Host ""
+    Write-Host "  $bar" -ForegroundColor DarkCyan
+    Write-Host "  Step " -ForegroundColor DarkCyan -NoNewline
+    Write-Host "$script:StepCurrent/$script:StepTotal" -ForegroundColor White -NoNewline
+    Write-Host "  —  " -ForegroundColor DarkCyan -NoNewline
+    Write-Host $Name -ForegroundColor Cyan
+    Write-Host "  $bar" -ForegroundColor DarkCyan
 }
 
 function Invoke-Download {
@@ -63,13 +105,18 @@ function Invoke-Download {
         $buf    = [byte[]]::new(65536)
         $downloaded = 0
         $read = 0
+        $barWidth = 30
+        [Console]::WriteLine("")   # blank line so progress bar never overlaps the preceding message
         while (($read = $stream.Read($buf, 0, $buf.Length)) -gt 0) {
             $out.Write($buf, 0, $read)
             $downloaded += $read
             if ($total -gt 0) {
-                Write-Progress -Id 2 -ParentId 1 -Activity "Downloading $Label" `
-                    -Status "$([math]::Round($downloaded/1MB,1)) MB / $([math]::Round($total/1MB,1)) MB" `
-                    -PercentComplete ([int]($downloaded * 100 / $total))
+                $pct    = [int]($downloaded * 100 / $total)
+                $filled = [int]($pct / 100 * $barWidth)
+                $bar    = ([string][char]0x2588 * $filled) + ([string][char]0x2591 * ($barWidth - $filled))
+                $mb     = [math]::Round($downloaded / 1MB, 1)
+                $tot    = [math]::Round($total / 1MB, 1)
+                [Console]::Write("`r  [$bar] $pct%  ($mb / $tot MB)  ")
             }
         }
     } finally {
@@ -77,7 +124,7 @@ function Invoke-Download {
         if ($stream) { $stream.Dispose() }
         $client.Dispose()
     }
-    Write-Progress -Id 2 -Activity "Downloading $Label" -Completed
+    [Console]::WriteLine("`r  [$([string][char]0x2588 * $barWidth)]  $Label complete.          ")
 }
 
 function Invoke-ElevationCheck {
@@ -88,8 +135,8 @@ function Invoke-ElevationCheck {
         Write-Host "Re-launching as Administrator..." -ForegroundColor Yellow
         # Build a single quoted argument string so paths with spaces are handled correctly.
         $uninstallFlag = if ($Uninstall) { ' -Uninstall' } else { '' }
-        Start-Process PowerShell -Verb RunAs `
-            -ArgumentList "-ExecutionPolicy Bypass -File `"$PSCommandPath`"$uninstallFlag"
+        Start-Process $PS -Verb RunAs `
+            -ArgumentList "-ExecutionPolicy Bypass -NoExit -File `"$PSCommandPath`"$uninstallFlag"
         exit
     }
 }
@@ -103,7 +150,7 @@ function Preflight {
     }
     Write-Ok "Architecture: x86_64"
 
-    # tar is required to extract fnn — present on Windows 10 1803+ by default
+    # tar is required to extract fnn - present on Windows 10 1803+ by default
     if (-not (Get-Command tar -ErrorAction SilentlyContinue)) {
         Write-Err "tar.exe not found. It is built into Windows 10 (1803+) and Windows 11."
         Write-Err "If you are on an older version, install Git for Windows and retry."
@@ -151,8 +198,12 @@ function Get-NodeConfig {
         $script:VpsIp = (Read-Host "Enter your server's public IP address").Trim()
         if (-not $script:VpsIp) { Write-Warn "IP address cannot be empty." }
     }
+    Write-Host "  (Press Enter to keep the default. Do NOT type Y or N here — this is a name, not a yes/no.)" -ForegroundColor DarkGray
     $resp = Read-Host "Choose a name for your node (visible on the network) [$NodeAlias]"
-    if ($resp) {
+    if ($resp -match '^[yYnN]$') {
+        Write-Warn "Looks like you typed Y/N. Keeping default name '$NodeAlias'."
+        Write-Warn "To set a custom name, re-run the installer and type the full name here."
+    } elseif ($resp) {
         # Strip chars that would break a YAML double-quoted string (quotes, backslash, control chars)
         $script:NodeAlias = ($resp -replace '["\\\x00-\x1f]', '').Trim()
         if (-not $script:NodeAlias) { $script:NodeAlias = 'fiber-node' }
@@ -172,7 +223,11 @@ function Setup-Firewall {
 
 function Install-CkbCli {
     if (Test-Path "$InstallDir\ckb-cli.exe") {
-        Write-Ok "ckb-cli already installed"; return
+        $installedVer = (& "$InstallDir\ckb-cli.exe" --version 2>&1 | Select-Object -First 1) -replace '^ckb-cli\s+', ''
+        if ($installedVer -and $installedVer.Trim().StartsWith($CKB_CLI_VERSION.TrimStart('v'))) {
+            Write-Ok "ckb-cli $CKB_CLI_VERSION already installed — skipping download."; return
+        }
+        Write-Info "ckb-cli version mismatch (have: $($installedVer.Trim()), want: $CKB_CLI_VERSION) — re-downloading..."
     }
     Write-Info "Downloading ckb-cli $CKB_CLI_VERSION..."
     New-Item -ItemType Directory -Force -Path $InstallDir\temp | Out-Null
@@ -196,7 +251,22 @@ function Install-CkbCli {
 function Install-Fnn {
     New-Item -ItemType Directory -Force -Path $InstallDir\ckb | Out-Null
     if (Test-Path "$InstallDir\fnn.exe") {
-        Write-Ok "fnn already present"; return
+        $installedVer = (& "$InstallDir\fnn.exe" --version 2>&1 | Select-Object -First 1) -replace '^fnn\s+', ''
+        if ($installedVer -and $installedVer.Trim().StartsWith($FNN_VERSION.TrimStart('v'))) {
+            Write-Ok "fnn $FNN_VERSION already installed — skipping download."; return
+        }
+        Write-Info "fnn version mismatch (have: $($installedVer.Trim()), want: $FNN_VERSION) — re-downloading..."
+        # Stop any running node before replacing the binary (avoids file-in-use error)
+        $svc = Get-Service 'FiberNetworkNode' -ErrorAction SilentlyContinue
+        if ($svc -and $svc.Status -ne 'Stopped') {
+            Stop-Service 'FiberNetworkNode' -Force -ErrorAction SilentlyContinue
+            Start-Sleep 2
+            Write-Info "Node service stopped before binary update."
+        } elseif (Get-Process -Name fnn -ErrorAction SilentlyContinue) {
+            Get-Process -Name fnn | Stop-Process -Force
+            Start-Sleep 1
+            Write-Info "Running node stopped before binary update."
+        }
     }
     Write-Info "Downloading fnn $FNN_VERSION..."
     New-Item -ItemType Directory -Force -Path $InstallDir\temp | Out-Null
@@ -231,7 +301,7 @@ fiber:
   announce_listening_addr: true
   announced_addrs:
     - "/ip4/$Ip/tcp/8228"
-  node_name: "$Alias"
+  announced_node_name: "$Alias"
   chain: mainnet
   private_key_path: "$KeyPath"
   scripts:
@@ -287,7 +357,7 @@ fiber:
   announce_listening_addr: true
   announced_addrs:
     - "/ip4/$Ip/tcp/8228"
-  node_name: "$Alias"
+  announced_node_name: "$Alias"
   chain: testnet
   private_key_path: "$KeyPath"
   scripts:
@@ -337,6 +407,16 @@ services:
 }
 
 function Write-Config {
+    # Stop any running node before overwriting config — prevents file-lock conflicts on re-run
+    if (Get-Service 'FiberNetworkNode' -ErrorAction SilentlyContinue) {
+        Stop-Service 'FiberNetworkNode' -Force -ErrorAction SilentlyContinue
+        Write-Info "Node service stopped for config update."
+    } elseif (Get-Process -Name fnn -ErrorAction SilentlyContinue) {
+        Get-Process -Name fnn | Stop-Process -Force
+        Start-Sleep 1
+        Write-Info "Running node stopped for config update."
+    }
+
     # YAML requires forward slashes (backslashes are escape sequences in YAML strings)
     $keyPath = $InstallDir.Replace('\', '/') + '/ckb/key'
     $configPath = "$InstallDir\config.yml"
@@ -359,20 +439,35 @@ function Write-Config {
             # Patch the downloaded config with our settings using regex
             # private_key_path
             $raw = $raw -replace '(?m)(private_key_path:\s*).*', "`${1}`"$keyPath`""
-            # node_name — replace if present, otherwise insert after the first listening_addr
-            if ($raw -match '(?m)^\s+node_name:') {
-                $raw = $raw -replace '(?m)(^\s+node_name:\s*).*', "`${1}`"$NodeAlias`""
-            } else {
-                $raw = $raw -replace '(?m)(^\s+listening_addr:.*)', "`$1`n  node_name: `"$NodeAlias`""
-            }
-            # announced_addrs — replace whatever value is there with our VPS entry
+            # announced_node_name - strip ALL existing occurrences line-by-line (avoids
+            # duplicates regardless of CRLF/LF or indentation), then insert exactly one
+            # after the first listening_addr line in the file.
+            $raw = ($raw -split '\r?\n' | Where-Object { $_ -notmatch '^\s*announced_node_name:' }) -join "`n"
+            # Insert exactly one announced_node_name after the fiber listening_addr.
+            # (?m)^ anchors to line-start so announce_listening_addr: is NOT matched.
+            $raw = [regex]::Replace($raw, '(?m)^([ \t]*listening_addr:[^\n]*)',
+                "`$1`n  announced_node_name: `"$NodeAlias`"", 1)
+            # Safety net: if duplicates still exist, keep only the first occurrence
+            $lines = $raw -split '\n'
+            $seen = $false
+            $raw = ($lines | ForEach-Object {
+                if ($_ -match '^\s*announced_node_name:') {
+                    if (-not $seen) { $seen = $true; $_ }
+                } else { $_ }
+            }) -join "`n"
+            # announced_addrs - replace whatever value is there with our VPS entry
             $raw = [regex]::Replace($raw,
                 '(?s)(\s+announced_addrs:).*?(?=\n\s+\w|\nrpc:)',
                 "`$1`n    - `"/ip4/$VpsIp/tcp/8228`"")
-            # rpc listening_addr — ensure localhost only
+            # rpc listening_addr - ensure localhost only
             $raw = [regex]::Replace($raw,
                 '(?m)(^rpc:\r?\n(?:[ \t]+.*\r?\n)*?[ \t]+listening_addr:)[ \t]*.*',
                 '$1 "127.0.0.1:8227"')
+            # ckb rpc_url - replace local CKB node default with public endpoint
+            $ckbRpcUrl = if ($Network -eq 'mainnet') { 'https://mainnet.ckb.dev/rpc' } else { 'https://testnet.ckbapp.dev/' }
+            $raw = [regex]::Replace($raw,
+                '(?m)(^ckb:\r?\n(?:[ \t]+.*\r?\n)*?[ \t]+rpc_url:)[ \t]*.*',
+                "`$1 `"$ckbRpcUrl`"")
 
             [System.IO.File]::WriteAllText($configPath, $raw, [System.Text.Encoding]::UTF8)
             $downloaded = $true
@@ -388,6 +483,28 @@ function Write-Config {
         $config | Out-File -Encoding utf8 $configPath -Force
     }
 
+    # Whitelist BEAF xUDT token for mainnet nodes
+    if ($Network -eq 'mainnet') {
+        $raw = [System.IO.File]::ReadAllText($configPath)
+        if ($raw -notmatch 'udt_cfg_infos') {
+            $beaf = @"
+  udt_cfg_infos:
+    - name: "BEAF"
+      symbol: "BEAF"
+      decimal: 0
+      auto_accept_channel_ckb_funding_amount: "0x0"
+      script:
+        code_hash: "0x50bd8d6680b8b9cf98b73f3c08faf8b2a21914311954118ad6609be6e78a1b95"
+        hash_type: "data1"
+        args: "0xc639759e988445217e4c08b2e7b416082d9de0cb061194e2f7f35a89bb6fbf4f"
+
+"@
+            $raw = [regex]::Replace($raw, '(?m)^rpc:', "$beaf`nrpc:")
+            [System.IO.File]::WriteAllText($configPath, $raw, [System.Text.Encoding]::UTF8)
+            Write-Ok "BEAF token whitelisted for UDT payments."
+        }
+    }
+
     Write-Ok "Config written to $configPath"
 }
 
@@ -399,13 +516,13 @@ function Generate-Wallet {
         Set-Location $InstallDir
 
         # Check whether ckb-cli already has an account (e.g. from a previous install attempt).
-        # If so, skip 'account new' — running it again would fail with "Check password failed"
+        # If so, skip 'account new' - running it again would fail with "Check password failed"
         # because ckb-cli prompts to unlock the existing keystore first.
         $existingList = (& "$InstallDir\ckb-cli.exe" account list 2>&1) | Out-String
         $existingLock = ([regex]::Match($existingList, 'lock_arg:\s*(0x[0-9a-fA-F]+)')).Groups[1].Value
 
         if ($existingLock) {
-            Write-Info "Existing CKB account found in keystore — skipping account creation."
+            Write-Info "Existing CKB account found in keystore - skipping account creation."
         } else {
             Write-Info "Generating new CKB account (you will be prompted for a keystore password)..."
             & "$InstallDir\ckb-cli.exe" account new
@@ -428,20 +545,27 @@ function Generate-Wallet {
             exit 1
         }
 
-        # Export with retry — wrong keystore password is recoverable, don't bail
+        # Export with retry — cap at 3 attempts to avoid endless loops on wrong password
         $exported = $false
+        $attempts = 0
         do {
-            Write-Info "Exporting private key — enter your keystore password when prompted..."
+            $attempts++
+            Write-Info "Exporting private key - enter your keystore password when prompted..."
             if (Test-Path 'ckb\exported-key') { Remove-Item 'ckb\exported-key' -Force }
             & "$InstallDir\ckb-cli.exe" account export --lock-arg $lock --extended-privkey-path ckb\exported-key
             if (Test-Path 'ckb\exported-key') {
                 $exported = $true
             } else {
-                Write-Warn "Export failed — wrong keystore password? Please try again."
+                if ($attempts -ge 3) {
+                    Write-Err "Export failed after 3 attempts. Re-run the installer with the correct keystore password."
+                    Set-Location $prevLocation
+                    exit 1
+                }
+                Write-Warn "Export failed - wrong keystore password? Please try again ($attempts/3)."
             }
         } until ($exported)
 
-        # ASCII encoding — fnn reads this as a raw hex string; BOM or UTF-16 would corrupt it
+        # ASCII encoding - fnn reads this as a raw hex string; BOM or UTF-16 would corrupt it
         Get-Content 'ckb\exported-key' | Select-Object -First 1 | Set-Content 'ckb\key' -Encoding ascii
         Remove-Item 'ckb\exported-key'
         Set-Location $prevLocation
@@ -459,7 +583,7 @@ function Generate-Wallet {
         }
         Write-Host ""
     } else {
-        Write-Warn "Key already exists — skipping wallet generation."
+        Write-Warn "Key already exists - skipping wallet generation."
     }
 
     # Always collect the node password (needed to write start.ps1)
@@ -468,19 +592,13 @@ function Generate-Wallet {
         Write-Host "Enter your existing node password (needed to update start.ps1)." -ForegroundColor Yellow
         Write-Host "IMPORTANT: use the same password you chose during the original install." -ForegroundColor Red
         Write-Host "           Using a different password will prevent the node from starting." -ForegroundColor Red
-        $p1 = Read-Host "  Node password" -AsSecureString
-        $script:NodePassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-            [Runtime.InteropServices.Marshal]::SecureStringToBSTR($p1))
+        $script:NodePassword = Read-MaskedInput "  Node password"
     } else {
         Write-Host "Choose a password to encrypt your node's secret key." -ForegroundColor Yellow
         Write-Host "You will need this every time the node starts. Store it somewhere safe." -ForegroundColor Yellow
         do {
-            $p1 = Read-Host "  Node password" -AsSecureString
-            $p2 = Read-Host "  Confirm password" -AsSecureString
-            $plain1 = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-                [Runtime.InteropServices.Marshal]::SecureStringToBSTR($p1))
-            $plain2 = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-                [Runtime.InteropServices.Marshal]::SecureStringToBSTR($p2))
+            $plain1 = Read-MaskedInput "  Node password"
+            $plain2 = Read-MaskedInput "  Confirm password"
             if ($plain1 -ne $plain2 -or $plain1.Length -eq 0) {
                 Write-Warn "Passwords don't match or are empty. Try again."
             }
@@ -510,14 +628,22 @@ function Uninstall-Node {
         exit 0
     }
 
-    # Stop and remove NSSM Windows Service if present
-    $svc = Get-Service 'FiberNetworkNode' -ErrorAction SilentlyContinue
-    if ($svc) {
-        Stop-Service 'FiberNetworkNode' -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 2
-        sc.exe delete FiberNetworkNode | Out-Null
-        Write-Ok "Windows Service (FiberNetworkNode) removed."
+    # Stop and remove NSSM Windows Services if present
+    foreach ($svcName in @('FiberNetworkNode', 'FiberDashboard')) {
+        $svc = Get-Service $svcName -ErrorAction SilentlyContinue
+        if ($svc) {
+            Stop-Service $svcName -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 1
+            sc.exe delete $svcName | Out-Null
+            Write-Ok "Windows Service ($svcName) removed."
+        }
     }
+
+    # Kill any lingering dashboard processes (hidden tsx/node process started by start-dashboard.ps1)
+    Get-Process -Name node -ErrorAction SilentlyContinue | Where-Object {
+        try { $_.MainModule.FileName -like '*fiber-node*' } catch { $false }
+    } | Stop-Process -Force -ErrorAction SilentlyContinue
+    Write-Ok "Dashboard processes stopped."
 
     # Stop any running fnn process (catches manual start.ps1 instances)
     $procs = Get-Process -Name fnn -ErrorAction SilentlyContinue
@@ -534,6 +660,11 @@ function Uninstall-Node {
         Write-Ok "Auto-start task removed."
     }
 
+    if (Get-ScheduledTask -TaskName 'FiberNodeUpdate' -ErrorAction SilentlyContinue) {
+        Unregister-ScheduledTask -TaskName 'FiberNodeUpdate' -Confirm:$false
+        Write-Ok "Auto-update task removed."
+    }
+
     # Remove firewall rules
     netsh advfirewall firewall delete rule name="Fiber p2p"    | Out-Null
     netsh advfirewall firewall delete rule name="Fiber RPC block" | Out-Null
@@ -541,6 +672,7 @@ function Uninstall-Node {
 
     # Delete the installation directory
     Write-Info "Deleting $InstallDir..."
+    Set-Location $env:USERPROFILE
     Remove-Item $InstallDir -Recurse -Force -ErrorAction Stop
     Write-Ok "Installation directory removed."
 
@@ -618,7 +750,7 @@ function Register-AutoStart {
         return
     }
 
-    # Try NSSM — installs fnn as a proper Windows Service that starts on boot,
+    # Try NSSM - installs fnn as a proper Windows Service that starts on boot,
     # even without a user logged in (unlike Task Scheduler AtLogOn triggers).
     $nssmExe = "$InstallDir\nssm.exe"
     $nssmOk  = $false
@@ -647,6 +779,23 @@ function Register-AutoStart {
             }
         } catch {
             Write-Warn "Could not download NSSM: $_"
+            # nssm.cc is sometimes unavailable — try winget as a fallback
+            if (Get-Command winget -ErrorAction SilentlyContinue) {
+                Write-Info "Trying winget as fallback for NSSM..."
+                try {
+                    winget install --id NSSM.NSSM --accept-package-agreements --accept-source-agreements -e | Out-Null
+                    $env:PATH = [System.Environment]::GetEnvironmentVariable('PATH', 'Machine') + ';' +
+                                [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+                    $wingetNssm = Get-Command nssm -ErrorAction SilentlyContinue
+                    if ($wingetNssm) {
+                        Copy-Item $wingetNssm.Source -Destination $nssmExe -Force
+                        Write-Ok "NSSM installed via winget."
+                        $nssmOk = $true
+                    }
+                } catch {
+                    Write-Warn "winget fallback also failed: $_"
+                }
+            }
         }
     } else {
         Write-Ok "NSSM already present at $nssmExe"
@@ -678,19 +827,39 @@ function Register-AutoStart {
         Start-Service 'FiberNetworkNode' -ErrorAction SilentlyContinue
         $svc = Get-Service 'FiberNetworkNode' -ErrorAction SilentlyContinue
         if ($svc -and $svc.Status -eq 'Running') {
-            Write-Ok "Fiber node installed as Windows Service (FiberNetworkNode) — starts on boot, no login required."
+            Write-Ok "Fiber node installed as Windows Service (FiberNetworkNode) - starts on boot, no login required."
         } else {
             Write-Warn "Service installed but may not be running yet."
             Write-Info "Check with: Get-Service FiberNetworkNode"
             Write-Info "Logs: $InstallDir\fnn.log and fnn-err.log"
         }
         Write-Info "Manage with: nssm start/stop/restart FiberNetworkNode  (or sc.exe / Services snap-in)"
+
+        # Also register the dashboard as an NSSM service if installed
+        if ($script:DashboardInstalled) {
+            $dashApp = "$InstallDir\dashboard\fiber-dashboard"
+            $tsxPath = "$dashApp\node_modules\.bin\tsx.cmd"
+            if (Test-Path $tsxPath) {
+                if (Get-ScheduledTask -TaskName 'FiberDashboard' -ErrorAction SilentlyContinue) {
+                    Unregister-ScheduledTask -TaskName 'FiberDashboard' -Confirm:$false | Out-Null
+                }
+                & $nssmExe stop   'FiberDashboard' 2>$null
+                & $nssmExe remove 'FiberDashboard' confirm 2>$null
+                & $nssmExe install 'FiberDashboard' "${PS}.exe" | Out-Null
+                & $nssmExe set 'FiberDashboard' AppParameters "-ExecutionPolicy Bypass -File `"$InstallDir\start-dashboard.ps1`"" | Out-Null
+                & $nssmExe set 'FiberDashboard' AppDirectory  "$InstallDir" | Out-Null
+                & $nssmExe set 'FiberDashboard' Start         SERVICE_AUTO_START | Out-Null
+                & $nssmExe set 'FiberDashboard' AppStdout     "$InstallDir\dashboard.log" | Out-Null
+                & $nssmExe set 'FiberDashboard' AppStderr     "$InstallDir\dashboard-err.log" | Out-Null
+                Write-Ok "Dashboard registered as Windows Service (FiberDashboard) - starts on boot."
+            }
+        }
     } else {
         # Fallback: Task Scheduler (requires user to be logged in)
-        Write-Warn "NSSM unavailable — falling back to Task Scheduler (node starts only when you log in)."
+        Write-Warn "NSSM unavailable - falling back to Task Scheduler (node starts only when you log in)."
         try {
             $action = New-ScheduledTaskAction `
-                -Execute 'PowerShell.exe' `
+                -Execute "${PS}.exe" `
                 -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$InstallDir\start.ps1`""
             $trigger  = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
             $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable `
@@ -707,15 +876,31 @@ function Register-AutoStart {
 }
 
 function Install-Dashboard {
-    # Dashboard source is expected in a fiber-dashboard\ folder next to this installer.
-    # The outer folder contains ckb-fiber\ (RPC client) and fiber-dashboard\ (the app).
+    # Dashboard source: prefer a fiber-dashboard\ folder next to this installer.
+    # If not present, download it automatically from GitHub.
     $dashboardOuter = "$PSScriptRoot\fiber-dashboard"
     $dashboardInner = "$dashboardOuter\fiber-dashboard"
 
     if (-not (Test-Path "$dashboardInner\package.json")) {
-        Write-Warn "Dashboard source not found at $dashboardOuter"
-        Write-Info "Copy the fiber-dashboard\ folder next to this installer, then re-run."
-        return
+        Write-Info "Dashboard source not found locally — downloading from GitHub..."
+        $zipUrl  = "https://github.com/tecmeup123/fiber-node-installer/archive/refs/heads/master.zip"
+        $zipTemp = "$env:TEMP\fiber-installer-master.zip"
+        $extTemp = "$env:TEMP\fiber-installer-master"
+        try {
+            Invoke-WebRequest -Uri $zipUrl -OutFile $zipTemp -UseBasicParsing
+            if (Test-Path $extTemp) { Remove-Item $extTemp -Recurse -Force }
+            Expand-Archive -Path $zipTemp -DestinationPath $extTemp -Force
+            $dashboardOuter = "$extTemp\fiber-node-installer-master\fiber-dashboard"
+            $dashboardInner = "$dashboardOuter\fiber-dashboard"
+            if (-not (Test-Path "$dashboardInner\package.json")) {
+                Write-Warn "Downloaded archive did not contain expected dashboard files. Skipping dashboard."
+                return
+            }
+            Write-Ok "Dashboard source downloaded."
+        } catch {
+            Write-Warn "Could not download dashboard source: $_"
+            return
+        }
     }
 
     $resp = Read-Host "`nInstall the Fiber Dashboard web UI? [Y/n]"
@@ -764,25 +949,30 @@ function Install-Dashboard {
     Set-Location $dashApp
 
     Write-Info "Installing npm dependencies (this may take a minute)..."
-    npm install 2>&1 | Select-Object -Last 5 | ForEach-Object { Write-Host "  $_" }
+    $env:npm_config_loglevel  = 'silent'
+    $env:npm_config_progress  = 'false'
+    npm install 2>&1 | Out-Null
+    Write-Ok "npm dependencies installed."
 
     Write-Info "Building dashboard frontend..."
-    npm run build 2>&1 | Select-Object -Last 5 | ForEach-Object { Write-Host "  $_" }
+    npm run build 2>&1 | Out-Null
+    Write-Ok "Dashboard frontend built."
+    Remove-Item Env:npm_config_loglevel -ErrorAction SilentlyContinue
+    Remove-Item Env:npm_config_progress -ErrorAction SilentlyContinue
 
     Set-Location $prevLoc
-    Write-Ok "Dashboard built."
 
     # tsx.cmd is installed as a devDependency in node_modules\.bin
     $tsxPath = "$dashApp\node_modules\.bin\tsx.cmd"
 
-    # Block the dashboard port at the firewall — dashboard has no authentication.
+    # Block the dashboard port at the firewall - dashboard has no authentication.
     # Port 3333 is used because port 3001 is commonly reserved by Windows (WSL2/Hyper-V).
     netsh advfirewall firewall delete rule name="Fiber Dashboard block" | Out-Null
     netsh advfirewall firewall add rule name="Fiber Dashboard block" dir=in action=block protocol=TCP localport=3333 | Out-Null
     Write-Ok "Firewall: port 3333 blocked from external access."
 
     # Write start-dashboard.ps1
-    # BIND_HOST=0.0.0.0 is required on Windows — 127.0.0.1 binding causes EACCES
+    # BIND_HOST=0.0.0.0 is required on Windows - 127.0.0.1 binding causes EACCES
     # on ports that Windows reserves for Hyper-V/WSL2. The firewall rule above blocks
     # external access, so 0.0.0.0 is safe here.
     @"
@@ -790,6 +980,7 @@ function Install-Dashboard {
 `$env:PORT         = '3333'
 `$env:BIND_HOST    = '0.0.0.0'
 `$env:NODE_ENV     = 'production'
+`$env:CKB_CLI_PATH = '$InstallDir\ckb-cli.exe'
 Set-Location '$dashApp'
 & '$tsxPath' server/index.ts
 "@ | Out-File -Encoding utf8 "$InstallDir\start-dashboard.ps1" -Force
@@ -800,7 +991,7 @@ Set-Location '$dashApp'
     if ($autoResp -notmatch '^[Nn]') {
         try {
             $action = New-ScheduledTaskAction `
-                -Execute 'PowerShell.exe' `
+                -Execute "${PS}.exe" `
                 -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$InstallDir\start-dashboard.ps1`""
             $trigger   = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
             $settings  = New-ScheduledTaskSettingsSet -StartWhenAvailable
@@ -823,6 +1014,131 @@ Set-Location '$dashApp'
     Write-Warn "The dashboard has NO login protection. Port 3333 is blocked by the firewall."
 }
 
+function Install-AutoUpdater {
+    $resp = Read-Host "`nEnable weekly auto-update for fnn? (the node restarts briefly when a new release is found) [Y/n]"
+    if ($resp -match '^[Nn]') {
+        Write-Info "Auto-update skipped. Run .\update.ps1 manually, or re-run the installer to enable it."
+        return
+    }
+
+    # Write update.ps1 to the install directory.
+    # Dollar signs for the update script are escaped with backtick so they survive the
+    # installer's here-string unexpanded; $InstallDir is intentionally expanded so the
+    # real install path is baked into the generated script.
+    @"
+# Fiber Network Node auto-updater
+# Generated by install-fiber.ps1 - do not edit manually.
+
+`$InstallDir = '$InstallDir'
+`$LogFile    = "`$InstallDir\update.log"
+
+function Log {
+    param(`$msg)
+    `$ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    Add-Content -Path `$LogFile -Value "[`$ts] `$msg"
+    Write-Host "  `$msg"
+}
+
+Log "Checking for fnn update..."
+
+try {
+    `$release = Invoke-RestMethod -UseBasicParsing -Uri 'https://api.github.com/repos/nervosnetwork/fiber/releases/latest' -TimeoutSec 15
+    `$latest  = `$release.tag_name
+} catch {
+    Log "ERROR: Could not fetch release info: `$_"
+    exit 1
+}
+
+`$verOut  = (& "`$InstallDir\fnn.exe" --version 2>&1) | Out-String
+`$current = if (`$verOut -match '(v\d+\.\d+\.\d+)') { `$matches[1] } else { 'unknown' }
+
+Log "Current: `$current  |  Latest: `$latest"
+
+if (`$current -eq `$latest) {
+    Log "Already up to date - nothing to do."
+    exit 0
+}
+
+Log "New version available: `$current -> `$latest"
+
+`$tmpDir  = "`$InstallDir\update-tmp"
+`$archive = "`$tmpDir\fnn.tar.gz"
+New-Item -ItemType Directory -Force -Path `$tmpDir | Out-Null
+
+`$url = "https://github.com/nervosnetwork/fiber/releases/download/`${latest}/fnn_`${latest}-x86_64-windows.tar.gz"
+Log "Downloading `$url ..."
+
+try {
+    Invoke-WebRequest -UseBasicParsing -Uri `$url -OutFile `$archive -TimeoutSec 300
+} catch {
+    Log "ERROR: Download failed: `$_"
+    Remove-Item `$tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+    exit 1
+}
+
+# Stop the service before swapping the binary
+`$svc = Get-Service 'FiberNetworkNode' -ErrorAction SilentlyContinue
+if (`$svc) {
+    Log "Stopping FiberNetworkNode service..."
+    Stop-Service 'FiberNetworkNode' -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 5
+} else {
+    `$proc = Get-Process -Name fnn -ErrorAction SilentlyContinue
+    if (`$proc) { `$proc | Stop-Process -Force; Start-Sleep -Seconds 3 }
+}
+
+# Extract and replace the binary
+tar -xzf `$archive -C `$tmpDir 2>`$null
+`$newBin = Get-ChildItem -Path `$tmpDir -Recurse -Filter fnn.exe | Select-Object -First 1
+if (-not `$newBin) {
+    Log "ERROR: fnn.exe not found in the downloaded archive."
+    Remove-Item `$tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+    if (`$svc) { Start-Service 'FiberNetworkNode' -ErrorAction SilentlyContinue }
+    exit 1
+}
+
+Copy-Item `$newBin.FullName -Destination "`$InstallDir\fnn.exe" -Force
+Remove-Item `$tmpDir -Recurse -Force
+Log "Binary replaced with `$latest"
+
+# Restart the service
+if (`$svc) {
+    Start-Service 'FiberNetworkNode' -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 5
+    `$svc = Get-Service 'FiberNetworkNode' -ErrorAction SilentlyContinue
+    `$svcStatus = `$svc.Status
+    if (`$svcStatus -eq 'Running') {
+        Log "Service restarted OK."
+    } else {
+        Log "WARNING: Service is `$svcStatus - check fnn.log and fnn-err.log."
+    }
+} else {
+    Log "No Windows Service found - start fnn manually via start.ps1."
+}
+
+Log "Done: fnn updated to `$latest"
+"@ | Out-File -Encoding utf8 "$InstallDir\update.ps1" -Force
+    Write-Ok "update.ps1 written to $InstallDir\update.ps1"
+
+    # Register a weekly Task Scheduler job
+    try {
+        $action    = New-ScheduledTaskAction `
+            -Execute "${PS}.exe" `
+            -Argument "-ExecutionPolicy Bypass -NonInteractive -WindowStyle Hidden -File `"$InstallDir\update.ps1`""
+        $trigger   = New-ScheduledTaskTrigger -Weekly -WeeksInterval 1 -DaysOfWeek Sunday -At '03:00AM'
+        $settings  = New-ScheduledTaskSettingsSet -StartWhenAvailable -RunOnlyIfNetworkAvailable
+        $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -RunLevel Highest
+        Register-ScheduledTask -TaskName 'FiberNodeUpdate' `
+            -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
+        Write-Ok "Auto-update scheduled - runs every Sunday at 3:00 AM."
+        Write-Info "To update manually: $PS -ExecutionPolicy Bypass -File `"$InstallDir\update.ps1`""
+        Write-Info "Update log: $InstallDir\update.log"
+    } catch {
+        Write-Warn "Could not register auto-update task: $_"
+        Write-Info "update.ps1 written - run it manually to update fnn."
+    }
+}
+
 # main flow
 Invoke-ElevationCheck
 if ($Uninstall) { Uninstall-Node }
@@ -838,7 +1154,7 @@ Show-Step 'Generating wallet';   Generate-Wallet
 
 Set-Location $InstallDir
 
-# Generate start.ps1 — use single-quoted PS string for password so $, `, ", \ are all safe.
+# Generate start.ps1 - use single-quoted PS string for password so $, `, ", \ are all safe.
 # Only single quotes need escaping in single-quoted PS strings (doubled: '').
 $escapedPw = $script:NodePassword.Replace("'", "''")
 @"
@@ -857,7 +1173,16 @@ Write-Ok "start.ps1 written to $InstallDir\start.ps1"
 `$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
     [Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not `$isAdmin) {
-    Start-Process PowerShell -Verb RunAs -ArgumentList "-ExecutionPolicy Bypass -File ``"`$PSCommandPath``""
+    Start-Process $PS -Verb RunAs -ArgumentList "-ExecutionPolicy Bypass -File ``"`$PSCommandPath``""
+    exit
+}
+
+# If running from inside the install dir, the process holds a lock on the folder.
+# Copy self to TEMP and re-launch from there so the folder can be deleted.
+if (`$PSCommandPath -like "`$InstallDir*") {
+    `$tmp = "`$env:TEMP\uninstall-fiber.ps1"
+    Copy-Item `$PSCommandPath `$tmp -Force
+    Start-Process $PS -Verb RunAs -ArgumentList "-ExecutionPolicy Bypass -File ``"`$tmp``""
     exit
 }
 
@@ -871,26 +1196,29 @@ Write-Host ""
 `$confirm = Read-Host "Type UNINSTALL to confirm, or press Enter to cancel"
 if (`$confirm -ne 'UNINSTALL') { Write-Host "Cancelled."; exit 0 }
 
-`$svc = Get-Service 'FiberNetworkNode' -ErrorAction SilentlyContinue
-if (`$svc) {
-    Stop-Service 'FiberNetworkNode' -Force -ErrorAction SilentlyContinue
-    Start-Sleep 2
-    sc.exe delete FiberNetworkNode | Out-Null
-    Write-Host "Windows Service (FiberNetworkNode) removed."
+foreach (`$svcName in @('FiberNetworkNode', 'FiberDashboard')) {
+    `$svc = Get-Service `$svcName -ErrorAction SilentlyContinue
+    if (`$svc) {
+        Stop-Service `$svcName -Force -ErrorAction SilentlyContinue
+        Start-Sleep 2
+        sc.exe delete `$svcName | Out-Null
+        Write-Host "Windows Service (`$svcName) removed."
+    }
 }
 
 `$procs = Get-Process -Name fnn -ErrorAction SilentlyContinue
 if (`$procs) { Write-Host "Stopping fnn..."; `$procs | Stop-Process -Force; Start-Sleep 2 }
 
-if (Get-ScheduledTask -TaskName 'FiberNetworkNode' -ErrorAction SilentlyContinue) {
-    Unregister-ScheduledTask -TaskName 'FiberNetworkNode' -Confirm:`$false
-    Write-Host "Node auto-start task removed."
-}
+Get-Process -Name node -ErrorAction SilentlyContinue | Where-Object {
+    try { `$_.MainModule.FileName -like '*fiber-node*' } catch { `$false }
+} | Stop-Process -Force -ErrorAction SilentlyContinue
 
-if (Get-ScheduledTask -TaskName 'FiberDashboard' -ErrorAction SilentlyContinue) {
-    Stop-ScheduledTask -TaskName 'FiberDashboard' -ErrorAction SilentlyContinue
-    Unregister-ScheduledTask -TaskName 'FiberDashboard' -Confirm:`$false
-    Write-Host "Dashboard auto-start task removed."
+foreach (`$task in @('FiberNetworkNode', 'FiberDashboard', 'FiberNodeUpdate')) {
+    if (Get-ScheduledTask -TaskName `$task -ErrorAction SilentlyContinue) {
+        Stop-ScheduledTask -TaskName `$task -ErrorAction SilentlyContinue
+        Unregister-ScheduledTask -TaskName `$task -Confirm:`$false
+        Write-Host "Scheduled task (`$task) removed."
+    }
 }
 
 netsh advfirewall firewall delete rule name="Fiber p2p"           | Out-Null
@@ -898,6 +1226,7 @@ netsh advfirewall firewall delete rule name="Fiber RPC block"     | Out-Null
 netsh advfirewall firewall delete rule name="Fiber Dashboard block" | Out-Null
 Write-Host "Firewall rules removed."
 
+Set-Location `$env:USERPROFILE
 Remove-Item `$InstallDir -Recurse -Force -ErrorAction Stop
 Write-Host "`nFiber Network Node uninstalled." -ForegroundColor Green
 "@ | Out-File -Encoding utf8 "$InstallDir\uninstall.ps1" -Force
@@ -905,9 +1234,9 @@ Write-Ok "uninstall.ps1 written to $InstallDir\uninstall.ps1"
 
 Show-Step 'Node health check';   Test-NodeStartup
 Show-Step 'Dashboard (optional)'; Install-Dashboard
-Write-Progress -Id 1 -Activity 'Fiber Node Setup' -Completed
 
 Register-AutoStart
+Install-AutoUpdater
 
 Write-Host "`nInstallation complete!" -ForegroundColor Green
 Write-Host ""
@@ -918,15 +1247,15 @@ if ($script:FundingAddress) {
     Write-Host "============================================================" -ForegroundColor Green
     Write-Host ""
 }
-Write-Host "To start your Fiber node:" -ForegroundColor Yellow
-Write-Host "  cd $InstallDir" -ForegroundColor Cyan
-Write-Host "  .\start.ps1" -ForegroundColor Cyan
+Write-Host "  Terminal 1 — start the node:" -ForegroundColor Yellow
+Write-Host "    cd $InstallDir" -ForegroundColor Cyan
+Write-Host "    .\start.ps1" -ForegroundColor Cyan
 Write-Host ""
-if ($script:DashboardInstalled) {
-    Write-Host "To start the dashboard:" -ForegroundColor Yellow
-    Write-Host "  cd $InstallDir" -ForegroundColor Cyan
-    Write-Host "  .\start-dashboard.ps1" -ForegroundColor Cyan
-    Write-Host "  Then open http://localhost:3333 in your browser." -ForegroundColor Cyan
+if ($script:DashboardInstalled -or (Test-Path "$InstallDir\start-dashboard.ps1")) {
+    Write-Host "  Terminal 2 — start the dashboard:" -ForegroundColor Yellow
+    Write-Host "    cd $InstallDir" -ForegroundColor Cyan
+    Write-Host "    .\start-dashboard.ps1" -ForegroundColor Cyan
+    Write-Host "    Then open http://localhost:3333 in your browser." -ForegroundColor Cyan
     Write-Host ""
 }
-Write-Warn "start.ps1 contains your password — keep it private and do not share it."
+Write-Warn "start.ps1 contains your password - keep it private and do not share it."

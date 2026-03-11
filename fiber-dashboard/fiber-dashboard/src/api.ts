@@ -102,5 +102,10 @@ export const api = {
     ),
   getWallet: () =>
     apiFetch<{ address: string; capacity: string; isMainnet: boolean; ckbRpcUrl: string }>("/api/wallet"),
-  health: () => apiFetch<{ ok: boolean; timestamp: number }>("/api/health"),
+  transferCkb: (body: { toAddress: string; amountCkb: string; feeCkb: string; password: string }) =>
+    apiFetch<{ txHash: string }>("/api/wallet/transfer", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  health: () => apiFetch<{ ok: boolean; timestamp: number; startedAt: number }>("/api/health"),
 };
