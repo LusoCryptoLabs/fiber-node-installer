@@ -1,0 +1,8 @@
+{
+  "name": "ckb-fiber",
+  "version": "1.0.0",
+  "description": "JSON-RPC client for the Fiber Network Node",
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts"
+}
