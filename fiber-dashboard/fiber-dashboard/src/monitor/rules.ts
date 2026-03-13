@@ -39,28 +39,33 @@ function pct(part: bigint, total: bigint): number {
 
 // ── Rules ───────────────────────────────────────────────────────────────────
 
+// Normalize state_name for comparison (RPC returns UPPER_SNAKE_CASE like "CHANNEL_READY")
+function normalizeState(state: string): string {
+  return state.toUpperCase().replace(/[^A-Z]/g, "");
+}
+
 function channelHealthRules(channels: Channel[]): Alert[] {
   const alerts: Alert[] = [];
 
-  const closing = channels.filter(
-    (c) => c.state.state_name === "ShuttingDown" || c.state.state_name === "Closed"
-  );
+  const closing = channels.filter((c) => {
+    const s = normalizeState(c.state.state_name);
+    return s === "SHUTTINGDOWN" || s === "CLOSED";
+  });
   for (const ch of closing) {
+    const isClosed = normalizeState(ch.state.state_name) === "CLOSED";
     alerts.push({
       id: `ch-closing-${ch.channel_id}`,
       category: "channel",
       severity: "critical",
-      title: `Channel ${trunc(ch.channel_id)} is ${ch.state.state_name === "Closed" ? "closed" : "closing"}`,
+      title: `Channel ${trunc(ch.channel_id)} is ${isClosed ? "closed" : "closing"}`,
       detail: `This channel with peer ${trunc(ch.peer_id)} is in ${ch.state.state_name} state.`,
     });
   }
 
-  const pending = channels.filter(
-    (c) =>
-      c.state.state_name !== "ChannelReady" &&
-      c.state.state_name !== "ShuttingDown" &&
-      c.state.state_name !== "Closed"
-  );
+  const pending = channels.filter((c) => {
+    const s = normalizeState(c.state.state_name);
+    return s !== "CHANNELREADY" && s !== "SHUTTINGDOWN" && s !== "CLOSED";
+  });
   for (const ch of pending) {
     alerts.push({
       id: `ch-pending-${ch.channel_id}`,
@@ -71,7 +76,7 @@ function channelHealthRules(channels: Channel[]): Alert[] {
     });
   }
 
-  const ready = channels.filter((c) => c.state.state_name === "ChannelReady");
+  const ready = channels.filter((c) => normalizeState(c.state.state_name) === "CHANNELREADY");
   for (const ch of ready) {
     const local = hexToBigInt(ch.local_balance);
     const remote = hexToBigInt(ch.remote_balance);
@@ -158,24 +163,13 @@ function connectivityRules(
     });
   }
 
-  if (nodeInfo && !nodeInfo.is_announced) {
-    alerts.push({
-      id: "conn-not-announced",
-      category: "connectivity",
-      severity: "warning",
-      title: "Node not announced to network",
-      detail:
-        "Other nodes cannot discover you. Your node can still open channels, but won't appear in the network graph.",
-    });
-  }
-
   if (nodeInfo && nodeInfo.addresses.length === 0) {
     alerts.push({
       id: "conn-no-addr",
       category: "connectivity",
       severity: "warning",
-      title: "No listening addresses",
-      detail: "Your node has no public addresses. Other nodes cannot connect to you.",
+      title: "No public addresses configured",
+      detail: "Your node has no announced addresses. Other nodes cannot discover or connect to you. Check announced_addrs in config.yml.",
     });
   }
 
@@ -184,7 +178,7 @@ function connectivityRules(
 
 function liquidityRules(channels: Channel[]): Alert[] {
   const alerts: Alert[] = [];
-  const ready = channels.filter((c) => c.state.state_name === "ChannelReady");
+  const ready = channels.filter((c) => normalizeState(c.state.state_name) === "CHANNELREADY");
 
   let totalLocal = 0n;
   let totalRemote = 0n;

@@ -31,14 +31,15 @@ The installer optionally sets up a **private web dashboard** at `http://localhos
 
 | Tab | What it does |
 |-----|-------------|
-| **Overview** | Node status, open channels, peer count, local balance, uptime, and routing income earned |
+| **Overview** | Node status, open channels, peer count, local balance, uptime, and a getting-started guide for new operators |
+| **Monitor** | Real-time health alerts — channel imbalance, connectivity issues, liquidity warnings, and routing fee checks |
 | **Channels** | Open channels to peers, close channels, update fee rates, and see channel liquidity at a glance |
-| **Payments** | Send payments by invoice or direct keysend; live status tracking per payment |
-| **Invoices** | Create payment requests to receive funds; copy invoice strings; live paid/expired status; cancel open invoices |
+| **Payments** | Send payments by invoice or direct keysend; live status tracking; persistent payment history |
+| **Invoices** | Create payment requests to receive funds; copy invoice strings; live paid/expired status; cancel open invoices; persistent history |
 | **Peers** | Connect to peers by address, disconnect, and browse connected peers |
 | **Network Graph** | Interactive force-directed map of all known nodes and channels on the network |
 | **Wallet** | View your on-chain CKB address and balance; send CKB to any address |
-| **Settings** | Change the RPC URL the dashboard connects to |
+| **Settings** | RPC URL, dark/light theme, auto-update checker (notifies when a new version is available on GitHub) |
 
 > The dashboard is **local only** — it has no login screen, but the installer adds a firewall rule so only your own machine can reach it.
 

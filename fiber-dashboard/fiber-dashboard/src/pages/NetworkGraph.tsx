@@ -1,9 +1,37 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Network, RefreshCw, ZoomIn, ZoomOut, RotateCcw, Search } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Network, RefreshCw, ZoomIn, ZoomOut, RotateCcw, Search, Plug, GitFork, CheckCircle } from "lucide-react";
 import { api } from "../api.js";
 import { shannonsToCkb } from "../types.js";
 import type { GraphNode, ChannelInfo } from "../types.js";
+import { OpenChannelModal } from "../components/OpenChannelModal.js";
+
+type ActivityStatus = "active" | "stale" | "inactive";
+
+const ACTIVE_THRESHOLD  = 24 * 60 * 60 * 1000; // 24h
+const STALE_THRESHOLD   = 7  * 24 * 60 * 60 * 1000; // 7d
+
+function getActivity(timestampHex: string): ActivityStatus {
+  const ts = Number(BigInt(timestampHex || "0x0"));
+  const age = Date.now() - ts;
+  if (age < ACTIVE_THRESHOLD) return "active";
+  if (age < STALE_THRESHOLD) return "stale";
+  return "inactive";
+}
+
+function activityLabel(status: ActivityStatus): string {
+  return status === "active" ? "Active" : status === "stale" ? "Stale" : "Inactive";
+}
+
+function timeSince(timestampHex: string): string {
+  const ts = Number(BigInt(timestampHex || "0x0"));
+  const age = Date.now() - ts;
+  const hours = Math.floor(age / 3_600_000);
+  if (hours < 1) return "< 1 hour ago";
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
 
 interface NodeData {
   id: string;
@@ -11,6 +39,8 @@ interface NodeData {
   addresses: string[];
   isOwn: boolean;
   channelCount: number;
+  timestamp: string;
+  activity: ActivityStatus;
 }
 
 interface EdgeData {
@@ -22,10 +52,20 @@ interface EdgeData {
 
 // ── Outer component ───────────────────────────────────────────────────────────
 
+function extractPeerId(multiaddr: string): string | null {
+  const match = multiaddr.match(/\/p2p\/([A-Za-z0-9]+)$/);
+  return match ? match[1] : null;
+}
+
+type ActivityFilter = "all" | "active" | "stale" | "inactive";
+
 export default function NetworkGraph() {
+  const qc = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedNode, setSelectedNode] = useState<NodeData | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<EdgeData | null>(null);
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
+  const [openChannelPeerId, setOpenChannelPeerId] = useState<string | null>(null);
 
   const { data: nodesData, isLoading: loadingNodes, refetch: refetchNodes } = useQuery({
     queryKey: ["graph-nodes"],
@@ -44,9 +84,22 @@ export default function NetworkGraph() {
     queryFn: api.getNodeInfo,
   });
 
+  const { data: peersData } = useQuery({
+    queryKey: ["peers"],
+    queryFn: api.getPeers,
+    refetchInterval: 30_000,
+  });
+
+  const connectedPubkeys = new Set((peersData?.peers ?? []).map((p) => p.pubkey));
+
+  const connectMut = useMutation({
+    mutationFn: (address: string) => api.connectPeer(address, false),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["peers"] }); },
+  });
+
   const ownNodeId = nodeInfoData?.node_id;
 
-  const nodes: NodeData[] = (nodesData?.nodes ?? []).map((n: GraphNode) => ({
+  const allNodes: NodeData[] = (nodesData?.nodes ?? []).map((n: GraphNode) => ({
     id: n.node_id,
     alias: n.node_name ?? "",
     addresses: n.addresses ?? [],
@@ -54,14 +107,33 @@ export default function NetworkGraph() {
     channelCount: (channelsData?.channels ?? []).filter(
       (c: ChannelInfo) => c.node1 === n.node_id || c.node2 === n.node_id
     ).length,
+    timestamp: n.timestamp,
+    activity: getActivity(n.timestamp),
   }));
 
-  const edges: EdgeData[] = (channelsData?.channels ?? []).map((c: ChannelInfo) => ({
+  const activityCounts = {
+    active: allNodes.filter((n) => n.activity === "active").length,
+    stale: allNodes.filter((n) => n.activity === "stale").length,
+    inactive: allNodes.filter((n) => n.activity === "inactive").length,
+  };
+
+  // Apply activity filter (own node always included)
+  const nodes: NodeData[] = activityFilter === "all"
+    ? allNodes
+    : allNodes.filter((n) => n.isOwn || n.activity === activityFilter);
+
+  const filteredNodeIds = new Set(nodes.map((n) => n.id));
+
+  const allEdges: EdgeData[] = (channelsData?.channels ?? []).map((c: ChannelInfo) => ({
     source: c.node1,
     target: c.node2,
     capacity: c.capacity,
     outpoint: c.channel_outpoint,
   }));
+
+  const edges: EdgeData[] = activityFilter === "all"
+    ? allEdges
+    : allEdges.filter((e) => filteredNodeIds.has(e.source) && filteredNodeIds.has(e.target));
 
   const matchedIds: Set<string> | null =
     searchQuery.length >= 2
@@ -90,19 +162,46 @@ export default function NetworkGraph() {
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-3 text-sm">
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 text-sm">
         <div className="card text-center py-3">
-          <div className="text-xl font-bold text-white">{nodes.length}</div>
+          <div className="text-xl font-bold text-white">{allNodes.length}</div>
           <div className="text-xs text-gray-500 mt-0.5">Nodes</div>
         </div>
         <div className="card text-center py-3">
-          <div className="text-xl font-bold text-white">{edges.length}</div>
+          <div className="text-xl font-bold text-white">{allEdges.length}</div>
           <div className="text-xs text-gray-500 mt-0.5">Channels</div>
         </div>
         <div className="card text-center py-3">
-          <div className="text-xl font-bold text-accent-green">{ownNodeId ? 1 : 0}</div>
-          <div className="text-xs text-gray-500 mt-0.5">Your Node</div>
+          <div className="text-xl font-bold text-accent-green">{activityCounts.active}</div>
+          <div className="text-xs text-gray-500 mt-0.5">Active (&lt;24h)</div>
         </div>
+        <div className="card text-center py-3">
+          <div className="text-xl font-bold text-accent-amber">{activityCounts.stale}</div>
+          <div className="text-xs text-gray-500 mt-0.5">Stale (1–7d)</div>
+        </div>
+        <div className="card text-center py-3">
+          <div className="text-xl font-bold text-gray-500">{activityCounts.inactive}</div>
+          <div className="text-xs text-gray-500 mt-0.5">Inactive (7d+)</div>
+        </div>
+      </div>
+
+      {/* Activity filter */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-gray-500 mr-1">Filter:</span>
+        {([
+          { key: "all" as ActivityFilter, label: "All", cls: "badge-blue" },
+          { key: "active" as ActivityFilter, label: "Active", cls: "badge-green" },
+          { key: "stale" as ActivityFilter, label: "Stale", cls: "badge-amber" },
+          { key: "inactive" as ActivityFilter, label: "Inactive", cls: "badge-grey" },
+        ]).map(({ key, label, cls }) => (
+          <button
+            key={key}
+            onClick={() => setActivityFilter(key)}
+            className={`${cls} cursor-pointer transition-opacity ${activityFilter === key ? "opacity-100 ring-1 ring-white/20" : "opacity-50 hover:opacity-75"}`}
+          >
+            {label}{key !== "all" && activityFilter === key && ` (${key === "active" ? activityCounts.active : key === "stale" ? activityCounts.stale : activityCounts.inactive})`}
+          </button>
+        ))}
       </div>
 
       {/* Search */}
@@ -158,9 +257,25 @@ export default function NetworkGraph() {
               <span className="label block mb-0.5">Node ID</span>
               <span className="mono text-gray-300 break-all">{selectedNode.id}</span>
             </div>
-            <div>
-              <span className="label">Channels </span>
-              <span className="text-gray-300">{selectedNode.channelCount}</span>
+            <div className="flex items-center gap-3">
+              <div>
+                <span className="label">Channels </span>
+                <span className="text-gray-300">{selectedNode.channelCount}</span>
+              </div>
+              <div>
+                <span className="label">Status </span>
+                <span className={
+                  selectedNode.activity === "active" ? "text-accent-green"
+                  : selectedNode.activity === "stale" ? "text-accent-amber"
+                  : "text-gray-500"
+                }>
+                  {activityLabel(selectedNode.activity)}
+                </span>
+              </div>
+              <div>
+                <span className="label">Last seen </span>
+                <span className="text-gray-300">{timeSince(selectedNode.timestamp)}</span>
+              </div>
             </div>
             {selectedNode.addresses.length > 0 && (
               <div>
@@ -168,6 +283,50 @@ export default function NetworkGraph() {
                 {selectedNode.addresses.map((a, i) => (
                   <div key={i} className="mono text-gray-400">{a}</div>
                 ))}
+              </div>
+            )}
+            {!selectedNode.isOwn && (
+              <div className="flex items-center gap-2 pt-2 border-t border-border mt-2">
+                {connectedPubkeys.has(selectedNode.id) ? (
+                  <>
+                    <span className="badge-green text-xs flex items-center gap-1">
+                      <CheckCircle size={11} /> Connected
+                    </span>
+                    <button
+                      onClick={() => {
+                        const addr = selectedNode.addresses[0];
+                        const pid = addr ? extractPeerId(addr) : null;
+                        if (pid) setOpenChannelPeerId(pid);
+                      }}
+                      disabled={!selectedNode.addresses[0]}
+                      className="btn-primary text-xs flex items-center gap-1"
+                    >
+                      <GitFork size={13} /> Open Channel
+                    </button>
+                  </>
+                ) : selectedNode.addresses.length > 0 ? (
+                  <>
+                    <button
+                      onClick={() => connectMut.mutate(selectedNode.addresses[0])}
+                      disabled={connectMut.isPending}
+                      className="btn-primary text-xs flex items-center gap-1"
+                    >
+                      <Plug size={13} /> {connectMut.isPending ? "Connecting…" : "Connect to Peer"}
+                    </button>
+                    {connectMut.isSuccess && (
+                      <span className="text-accent-green text-xs flex items-center gap-1">
+                        <CheckCircle size={11} /> Connected
+                      </span>
+                    )}
+                    {connectMut.isError && (
+                      <span className="text-accent-red text-xs">
+                        {(connectMut.error as Error).message.slice(0, 50)}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-xs text-gray-500">No addresses available — cannot connect directly</span>
+                )}
               </div>
             )}
           </div>
@@ -201,6 +360,13 @@ export default function NetworkGraph() {
             </div>
           </div>
         </div>
+      )}
+
+      {openChannelPeerId !== null && (
+        <OpenChannelModal
+          initialPeerId={openChannelPeerId}
+          onClose={() => setOpenChannelPeerId(null)}
+        />
       )}
     </div>
   );
@@ -347,12 +513,19 @@ function ForceDiagram({
 
       ctx.beginPath();
       ctx.arc(p.x, p.y, r, 0, 2 * Math.PI);
+
+      // Activity-based coloring
+      const activityColor =
+        node.activity === "active"   ? "#22c55e"  // green
+        : node.activity === "stale"  ? "#f59e0b"  // amber
+        :                              "#6b7280"; // grey
+
       ctx.fillStyle =
         node.isOwn  ? "#22c55e"
         : isMatch   ? "#fde047"
         : isHover   ? "#93c5fd"
-        : isDimmed  ? "rgba(59,130,246,0.18)"
-        :             "#3b82f6";
+        : isDimmed  ? "rgba(100,100,100,0.18)"
+        :             activityColor;
       ctx.fill();
 
       // Label
@@ -649,6 +822,13 @@ function ForceDiagram({
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseLeave}
       />
+
+      {/* Legend */}
+      <div className="absolute top-2 left-2 flex items-center gap-3 text-xs text-gray-500 select-none pointer-events-none z-10">
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-accent-green inline-block" /> Active</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-accent-amber inline-block" /> Stale</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-gray-500 inline-block" /> Inactive</span>
+      </div>
 
       <div className="absolute bottom-2 left-3 text-xs text-gray-700 select-none pointer-events-none">
         Scroll to zoom · Drag background to pan · Drag nodes to rearrange · Click node or channel for details

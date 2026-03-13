@@ -1,9 +1,28 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Users, Plus, RefreshCw, Unplug, GitFork } from "lucide-react";
+import { Users, Plus, RefreshCw, Unplug, GitFork, CheckCircle } from "lucide-react";
 import { api } from "../api.js";
-import type { PeerInfo } from "../types.js";
+import type { PeerInfo, GraphNode } from "../types.js";
 import { OpenChannelModal } from "../components/OpenChannelModal.js";
+
+const ACTIVE_THRESHOLD = 24 * 60 * 60 * 1000;
+const STALE_THRESHOLD  = 7  * 24 * 60 * 60 * 1000;
+
+function peerActivity(timestampHex: string | undefined): { label: string; badge: string } {
+  if (!timestampHex) return { label: "Unknown", badge: "badge-grey" };
+  const age = Date.now() - Number(BigInt(timestampHex));
+  if (age < ACTIVE_THRESHOLD) return { label: "Active", badge: "badge-green" };
+  if (age < STALE_THRESHOLD)  return { label: "Stale", badge: "badge-amber" };
+  return { label: "Inactive", badge: "badge-grey" };
+}
+
+function timeSince(timestampHex: string): string {
+  const age = Date.now() - Number(BigInt(timestampHex));
+  const hours = Math.floor(age / 3_600_000);
+  if (hours < 1) return "< 1h ago";
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
 
 const MAINNET_BOOTNODES = [
   {
@@ -29,12 +48,13 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
   const [address, setAddress] = useState("");
   const [save, setSave] = useState(false);
+  const [connected, setConnected] = useState(false);
 
   const connectMut = useMutation({
     mutationFn: () => api.connectPeer(address.trim(), save),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["peers"] });
-      onClose();
+      setConnected(true);
     },
   });
 
@@ -50,6 +70,24 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
           <button onClick={onClose} className="btn-ghost p-1">✕</button>
         </div>
 
+        {connected ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 p-4 bg-green-900/20 border border-green-800/30 rounded-lg">
+              <CheckCircle size={24} className="text-accent-green flex-shrink-0" />
+              <div>
+                <div className="text-sm font-semibold text-white">Peer connected</div>
+                <p className="text-xs text-gray-400 mt-1">
+                  You can now open a channel with this peer from the Peers table or the Channels tab.
+                </p>
+              </div>
+            </div>
+            <div className="mono text-xs text-gray-400 bg-bg-surface rounded-md p-2 break-all">
+              {address}
+            </div>
+            <button onClick={onClose} className="btn-primary w-full">Done</button>
+          </div>
+        ) : (
+          <>
         <p className="text-sm text-gray-400 mb-4">
           Enter a peer's multiaddr to connect. You need to be connected to a peer before you can open a channel with them.
         </p>
@@ -118,6 +156,8 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
             {connectMut.isPending ? "Connecting…" : "Connect"}
           </button>
         </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -135,11 +175,26 @@ export default function Peers() {
     refetchInterval: 30_000,
   });
 
+  const { data: graphData } = useQuery({
+    queryKey: ["graph-nodes"],
+    queryFn: () => api.getGraphNodes(500),
+    staleTime: 60_000,
+  });
+
+  // Map node_id (pubkey) → graph node for timestamp lookup
+  const graphNodeMap = new Map<string, GraphNode>();
+  for (const gn of graphData?.nodes ?? []) {
+    graphNodeMap.set(gn.node_id, gn);
+  }
+
+  const [disconnected, setDisconnected] = useState(false);
+
   const disconnectMut = useMutation({
     mutationFn: (peer_id: string) => api.disconnectPeer(peer_id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["peers"] });
-      setConfirmDisconnect(null);
+      setDisconnected(true);
+      setTimeout(() => { setConfirmDisconnect(null); setDisconnected(false); }, 1500);
     },
   });
 
@@ -185,15 +240,30 @@ export default function Peers() {
               <thead>
                 <tr>
                   <th>Pubkey</th>
+                  <th>Status</th>
                   <th>Address</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {peers.map((peer) => (
+                {peers.map((peer) => {
+                  const gn = graphNodeMap.get(peer.pubkey);
+                  const activity = peerActivity(gn?.timestamp);
+                  return (
                   <tr key={peer.pubkey} data-testid={`row-peer-${peer.pubkey.slice(0, 8)}`}>
                     <td>
-                      <span className="mono text-xs">{truncate(peer.pubkey)}</span>
+                      <div>
+                        <span className="mono text-xs">{truncate(peer.pubkey)}</span>
+                        {gn?.node_name && (
+                          <div className="text-xs text-gray-500 mt-0.5">{gn.node_name}</div>
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      <span className={activity.badge}>{activity.label}</span>
+                      {gn?.timestamp && (
+                        <div className="text-xs text-gray-600 mt-0.5">{timeSince(gn.timestamp)}</div>
+                      )}
                     </td>
                     <td>
                       <span className="mono text-xs text-gray-500">{peer.address}</span>
@@ -217,7 +287,8 @@ export default function Peers() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -225,32 +296,41 @@ export default function Peers() {
       )}
 
       {confirmDisconnect && (
-        <div className="modal-overlay" onClick={() => setConfirmDisconnect(null)}>
+        <div className="modal-overlay" onClick={() => !disconnected && setConfirmDisconnect(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold text-white mb-3">Disconnect Peer?</h2>
-            <p className="text-sm text-gray-400 mb-4">
-              This will disconnect from{" "}
-              <span className="mono">{truncate(confirmDisconnect.pubkey)}</span>.
-              Any open channels with this peer will be suspended until reconnection.
-            </p>
-            {disconnectMut.isError && (
-              <div className="bg-red-900/20 border border-red-800/50 rounded-md p-3 mb-4 text-sm text-red-400">
-                {(disconnectMut.error as Error).message}
+            {disconnected ? (
+              <div className="flex items-center gap-3 p-4">
+                <CheckCircle size={24} className="text-accent-green" />
+                <span className="text-sm font-semibold text-white">Peer disconnected</span>
               </div>
+            ) : (
+              <>
+                <h2 className="text-lg font-semibold text-white mb-3">Disconnect Peer?</h2>
+                <p className="text-sm text-gray-400 mb-4">
+                  This will disconnect from{" "}
+                  <span className="mono">{truncate(confirmDisconnect.pubkey)}</span>.
+                  Any open channels with this peer will be suspended until reconnection.
+                </p>
+                {disconnectMut.isError && (
+                  <div className="bg-red-900/20 border border-red-800/50 rounded-md p-3 mb-4 text-sm text-red-400">
+                    {(disconnectMut.error as Error).message}
+                  </div>
+                )}
+                <div className="flex gap-3">
+                  <button onClick={() => setConfirmDisconnect(null)} className="btn-secondary flex-1">
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => disconnectMut.mutate(confirmDisconnect.peer_id)}
+                    disabled={disconnectMut.isPending}
+                    className="btn-danger flex-1"
+                    data-testid="button-disconnect-confirm"
+                  >
+                    {disconnectMut.isPending ? "Disconnecting…" : "Disconnect"}
+                  </button>
+                </div>
+              </>
             )}
-            <div className="flex gap-3">
-              <button onClick={() => setConfirmDisconnect(null)} className="btn-secondary flex-1">
-                Cancel
-              </button>
-              <button
-                onClick={() => disconnectMut.mutate(confirmDisconnect.peer_id)}
-                disabled={disconnectMut.isPending}
-                className="btn-danger flex-1"
-                data-testid="button-disconnect-confirm"
-              >
-                {disconnectMut.isPending ? "Disconnecting…" : "Disconnect"}
-              </button>
-            </div>
           </div>
         </div>
       )}

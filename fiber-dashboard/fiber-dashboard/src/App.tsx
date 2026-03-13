@@ -49,8 +49,15 @@ const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: "settings", label: "Settings", icon: <Settings size={18} /> },
 ];
 
+const validTabs = new Set<string>(tabs.map((t) => t.id));
+
+function loadTab(): TabId {
+  const stored = localStorage.getItem("fiber_active_tab");
+  return stored && validTabs.has(stored) ? (stored as TabId) : "overview";
+}
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const [activeTab, setActiveTab] = useState<TabId>(loadTab);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -114,6 +121,7 @@ export default function App() {
 
   function handleTabClick(id: TabId) {
     setActiveTab(id);
+    localStorage.setItem("fiber_active_tab", id);
     setMobileMenuOpen(false);
   }
 

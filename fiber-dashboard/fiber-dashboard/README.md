@@ -9,14 +9,15 @@ A standalone web dashboard for managing your Fiber Network Node. Built for non-t
 The Fiber Dashboard is a React + Express web app that connects to your Fiber node's RPC and gives you a visual interface for everything the node can do. It runs on your VPS alongside the node, accessible in any browser.
 
 **Tabs:**
-- **Overview** — node health, open channel count, total liquidity bar chart
+- **Overview** — node health, open channel count, total liquidity, and a getting-started onboarding guide for new operators
+- **Monitor** — deterministic real-time alerts engine covering channel health, connectivity, liquidity, and routing fees
 - **Channels** — open/close/inspect channels, see local vs remote balance per channel
-- **Payments** — send payments via invoice or keysend, track payment status in real time
-- **Invoices** — generate invoices to request payment, decode any invoice
+- **Payments** — send payments via invoice or keysend, track payment status in real time, persistent history
+- **Invoices** — generate invoices to request payment, decode any invoice, persistent history
 - **Peers** — connect/disconnect peers, quick-connect buttons for the official bootnodes
-- **Network Graph** — visual map of connected nodes and channels in the network
-- **Wallet** — total local/remote liquidity breakdown, channel capacity charts
-- **Settings** — configure the RPC URL, test connection, links to docs
+- **Network Graph** — interactive force-directed canvas map of all nodes and channels in the network
+- **Wallet** — on-chain CKB address and balance, send CKB to any address
+- **Settings** — RPC URL, dark/light theme toggle, auto-update checker (queries GitHub for new releases), resource links
 
 ---
 

@@ -108,4 +108,14 @@ export const api = {
       body: JSON.stringify(body),
     }),
   health: () => apiFetch<{ ok: boolean; timestamp: number; startedAt: number }>("/api/health"),
+  checkVersion: () =>
+    apiFetch<{
+      current: string;
+      latest: string;
+      updateAvailable: boolean;
+      releaseUrl?: string;
+      publishedAt?: string;
+      releaseNotes?: string;
+      error?: string;
+    }>("/api/version/check"),
 };

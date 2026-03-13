@@ -70,7 +70,9 @@ export default function Overview() {
   });
 
   const channels = channelsData?.channels ?? [];
-  const readyChannels = channels.filter((c: any) => c.state.state_name === "ChannelReady");
+  const readyChannels = channels.filter((c: any) =>
+    c.state.state_name.toUpperCase().replace(/[^A-Z]/g, "") === "CHANNELREADY"
+  );
 
   // Fee rate: the millionths of the payment amount your node earns per hop it forwards.
   // e.g. 100 ppm = 0.01% = earn 1 CKB for every 10,000 CKB routed.

@@ -1,7 +1,27 @@
 import { useState, useEffect } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { Settings, CheckCircle, XCircle, Moon, Sun, ExternalLink } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Settings, CheckCircle, XCircle, Moon, Sun, ExternalLink, ArrowUpCircle, RefreshCw, Copy, Check, Heart } from "lucide-react";
 import { api } from "../api.js";
+
+const SUPPORT_ADDRESSES = [
+  { label: "CKB", address: "ckb1qrgqep8saj8agswr30pls73hra28ry8jlnlc3ejzh3dl2ju7xxpjxqgqq9fwtuqzxaww3afzur45fntyhhrvnrplq5se06q0" },
+  { label: "ETH", address: "0x5F407a63b13873BbFb1E926Adb487E6D615461eA" },
+  { label: "BTC", address: "bc1qsceyf6yrlrn2fxrgxtpk55n48nsx4er8cpup5q" },
+];
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <button onClick={handleCopy} className="btn-ghost p-1 flex-shrink-0" title="Copy to clipboard">
+      {copied ? <Check size={13} className="text-accent-green" /> : <Copy size={13} />}
+    </button>
+  );
+}
 
 export default function SettingsPage() {
   const [rpcUrl, setRpcUrl] = useState(
@@ -21,6 +41,13 @@ export default function SettingsPage() {
     localStorage.setItem("fiber_theme", theme);
   }, [theme]);
 
+  const { data: versionData, refetch: recheckVersion, isFetching: versionChecking } = useQuery({
+    queryKey: ["version-check"],
+    queryFn: api.checkVersion,
+    refetchInterval: 30 * 60 * 1000, // recheck every 30 min
+    staleTime: 10 * 60 * 1000,
+  });
+
   const testMut = useMutation({
     mutationFn: () => api.health(),
   });
@@ -34,6 +61,41 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6 max-w-2xl">
       <h1 className="text-xl font-bold text-white">Settings</h1>
+
+      {versionData?.updateAvailable && (
+        <div className="bg-accent-green/10 border border-accent-green/30 rounded-lg p-4 flex items-start gap-3">
+          <ArrowUpCircle size={20} className="text-accent-green flex-shrink-0 mt-0.5" />
+          <div className="flex-1 space-y-1">
+            <div className="text-sm font-semibold text-white">
+              Update available: {versionData.latest}
+            </div>
+            <p className="text-xs text-gray-400">
+              You're running {versionData.current}.
+              {versionData.publishedAt && (
+                <> Released {new Date(versionData.publishedAt).toLocaleDateString()}.</>
+              )}
+            </p>
+            {versionData.releaseNotes && (
+              <p className="text-xs text-gray-500 mt-1 line-clamp-2">{versionData.releaseNotes}</p>
+            )}
+            <div className="flex items-center gap-3 mt-2">
+              {versionData.releaseUrl && (
+                <a
+                  href={versionData.releaseUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-accent-green hover:text-green-300 flex items-center gap-1"
+                >
+                  <ExternalLink size={12} /> View release notes
+                </a>
+              )}
+              <span className="text-xs text-gray-500">
+                Run <span className="mono">./update.sh</span> or <span className="mono">.\update.ps1</span> to update
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="card space-y-4">
         <h2 className="section-title">Connection</h2>
@@ -162,8 +224,63 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="text-xs text-gray-600 pt-2">
-        Fiber Dashboard v1.1.0 · Uses @scryve-tools/ckb-fiber
+      <div className="card space-y-4">
+        <div className="flex items-center gap-2">
+          <Heart size={15} className="text-accent-red" />
+          <h2 className="section-title mb-0">About & Support</h2>
+        </div>
+        <div>
+          <div className="text-sm font-semibold text-white">Fiber Node Dashboard</div>
+          <p className="text-xs text-gray-500 mt-0.5">Built by tecmeup</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <a
+            href="https://x.com/tecmeup"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-secondary text-xs flex items-center gap-1.5"
+          >
+            <span className="font-bold">𝕏</span> Follow on X
+          </a>
+          <a
+            href="https://github.com/tecmeup123/fiber-node-installer"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-secondary text-xs flex items-center gap-1.5"
+          >
+            <ExternalLink size={13} /> GitHub
+          </a>
+        </div>
+        <div>
+          <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">Support the project</div>
+          <div className="space-y-2">
+            {SUPPORT_ADDRESSES.map(({ label, address }) => (
+              <div key={label} className="flex items-center gap-2 bg-bg-surface rounded-md px-3 py-2">
+                <span className="text-xs font-medium text-gray-400 w-8 flex-shrink-0">{label}</span>
+                <span className="mono text-xs text-gray-300 truncate flex-1">{address}</span>
+                <CopyButton text={address} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="text-xs text-gray-600 pt-2 flex items-center gap-3">
+        <span>Fiber Dashboard {versionData?.current ?? "v1.2.0"}</span>
+        <button
+          onClick={() => recheckVersion()}
+          disabled={versionChecking}
+          className="text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1"
+          title="Check for updates"
+        >
+          <RefreshCw size={11} className={versionChecking ? "animate-spin" : ""} />
+          {versionChecking ? "Checking…" : "Check for updates"}
+        </button>
+        {versionData && !versionData.updateAvailable && !versionData.error && (
+          <span className="text-accent-green flex items-center gap-1">
+            <CheckCircle size={11} /> Up to date
+          </span>
+        )}
       </div>
     </div>
   );

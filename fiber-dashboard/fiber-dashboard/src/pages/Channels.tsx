@@ -7,18 +7,19 @@ import type { Channel, ChannelState } from "../types.js";
 import { OpenChannelModal } from "../components/OpenChannelModal.js";
 
 function stateBadge(state: ChannelState) {
-  switch (state) {
-    case "ChannelReady":
+  const s = state.toUpperCase().replace(/[^A-Z]/g, "");
+  switch (s) {
+    case "CHANNELREADY":
       return <span className="badge-green">Ready</span>;
-    case "ShuttingDown":
+    case "SHUTTINGDOWN":
       return <span className="badge-amber">Closing</span>;
-    case "Closed":
+    case "CLOSED":
       return <span className="badge-grey">Closed</span>;
-    case "NegotiatingFunding":
-    case "CollaboratingFundingTx":
-    case "SigningCommitment":
-    case "AwaitingTxSignatures":
-    case "AwaitingChannelReady":
+    case "NEGOTIATINGFUNDING":
+    case "COLLABORATINGFUNDINGTX":
+    case "SIGNINGCOMMITMENT":
+    case "AWAITINGTXSIGNATURES":
+    case "AWAITINGCHANNELREADY":
       return <span className="badge-blue">Opening</span>;
     default:
       return <span className="badge-grey">{state}</span>;
@@ -132,10 +133,11 @@ export default function Channels() {
   });
 
   const channels = data?.channels ?? [];
+  const norm = (s: string) => s.toUpperCase().replace(/[^A-Z]/g, "");
   const filtered =
     filterState === "all"
       ? channels
-      : channels.filter((ch) => ch.state.state_name === filterState);
+      : channels.filter((ch) => norm(ch.state.state_name) === norm(filterState));
 
   return (
     <div className="space-y-5">
@@ -156,17 +158,23 @@ export default function Channels() {
       </div>
 
       <div className="flex gap-2 flex-wrap">
-        {["all", "ChannelReady", "NegotiatingFunding", "ShuttingDown", "Closed"].map((s) => (
+        {[
+          { key: "all", label: "All" },
+          { key: "CHANNEL_READY", label: "Ready" },
+          { key: "NEGOTIATING_FUNDING", label: "Opening" },
+          { key: "SHUTTING_DOWN", label: "Closing" },
+          { key: "CLOSED", label: "Closed" },
+        ].map(({ key, label }) => (
           <button
-            key={s}
-            onClick={() => setFilterState(s)}
-            className={`btn text-xs px-3 py-1.5 ${filterState === s ? "btn-primary" : "btn-secondary"}`}
-            data-testid={`filter-channel-${s}`}
+            key={key}
+            onClick={() => setFilterState(key)}
+            className={`btn text-xs px-3 py-1.5 ${filterState === key ? "btn-primary" : "btn-secondary"}`}
+            data-testid={`filter-channel-${key}`}
           >
-            {s === "all" ? "All" : s === "ChannelReady" ? "Ready" : s === "NegotiatingFunding" ? "Opening" : s === "ShuttingDown" ? "Closing" : s}
-            {s !== "all" && (
+            {label}
+            {key !== "all" && (
               <span className="ml-1.5 text-gray-400">
-                ({channels.filter((c) => c.state.state_name === s).length})
+                ({channels.filter((c) => c.state.state_name.toUpperCase().replace(/[^A-Z]/g, "") === key.replace(/[^A-Z]/g, "")).length})
               </span>
             )}
           </button>
@@ -223,7 +231,7 @@ export default function Channels() {
                         <CapacityBar local={local} remote={remote} />
                       </td>
                       <td>
-                        {ch.state.state_name === "ChannelReady" && (
+                        {norm(ch.state.state_name) === "CHANNELREADY" && (
                           <button
                             onClick={() => setClosingChannel(ch)}
                             className="btn-ghost text-xs text-accent-red hover:text-red-300"

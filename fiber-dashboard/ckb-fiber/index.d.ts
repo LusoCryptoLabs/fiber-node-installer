@@ -26,7 +26,6 @@ export interface NodeInfo {
   node_id: Pubkey;
   node_name: string;
   addresses: string[];
-  is_announced: boolean;
   chain_hash: Hash256;
   open_channel_auto_accept_min_ckb_funding_amount: HexUint64;
   auto_accept_channel_ckb_funding_amount: HexUint64;

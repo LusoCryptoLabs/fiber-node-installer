@@ -1,6 +1,6 @@
 {
   "name": "fiber-dashboard",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Fiber Network Node management dashboard for Scryve",
   "type": "module",
   "scripts": {
@@ -14,6 +14,7 @@
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "lucide-react": "^0.468.0",
+    "node-pty": "^1.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-force-graph-2d": "^1.27.0",

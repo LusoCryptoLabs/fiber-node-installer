@@ -139,7 +139,9 @@ export default function WalletPage() {
   });
 
   const allChannels = channels?.channels ?? [];
-  const readyChannels = allChannels.filter((c) => c.state.state_name === "ChannelReady");
+  const readyChannels = allChannels.filter((c) =>
+    c.state.state_name.toUpperCase().replace(/[^A-Z]/g, "") === "CHANNELREADY"
+  );
 
   const totalLocal = readyChannels.reduce((sum, ch) => sum + BigInt(ch.local_balance), 0n);
   const totalRemote = readyChannels.reduce((sum, ch) => sum + BigInt(ch.remote_balance), 0n);
