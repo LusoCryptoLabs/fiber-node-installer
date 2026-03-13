@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   Activity,
@@ -13,6 +13,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
+  ArrowUpCircle,
+  RefreshCw,
+  X,
 } from "lucide-react";
 import { api } from "./api.js";
 import { evaluateRules } from "./monitor/rules.js";
@@ -84,6 +87,21 @@ export default function App() {
     queryKey: ["health"],
     queryFn: api.health,
     refetchInterval: 60_000,
+  });
+
+  const { data: versionData } = useQuery({
+    queryKey: ["version-check"],
+    queryFn: api.checkVersion,
+    refetchInterval: 30 * 60 * 1000,
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const [updateDismissed, setUpdateDismissed] = useState(false);
+  const [updating, setUpdating] = useState(false);
+
+  const updateMut = useMutation({
+    mutationFn: () => api.triggerUpdate(),
+    onSuccess: () => setUpdating(true),
   });
 
   const isOnline = !isError && !!nodeInfo;
@@ -189,6 +207,9 @@ export default function App() {
                 {tab.id === "monitor" && monitorBadge && (
                   <span className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full ${monitorBadge} ring-2 ring-bg-surface`} />
                 )}
+                {tab.id === "settings" && versionData?.updateAvailable && !updateDismissed && (
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-accent-green ring-2 ring-bg-surface" />
+                )}
               </span>
               {(sidebarOpen || mobileMenuOpen) && (
                 <span className="flex-1">{tab.label}</span>
@@ -262,6 +283,45 @@ export default function App() {
             </span>
           </div>
         </header>
+
+        {updating && (
+          <div className="flex-shrink-0 bg-accent-blue/10 border-b border-accent-blue/20 px-4 md:px-6 py-2 flex items-center gap-3">
+            <RefreshCw size={16} className="text-accent-blue animate-spin flex-shrink-0" />
+            <span className="text-sm text-gray-300">
+              Updating to <span className="font-medium text-white">{versionData?.latest}</span>… The dashboard will restart automatically. Refresh this page in a few seconds.
+            </span>
+          </div>
+        )}
+
+        {versionData?.updateAvailable && !updateDismissed && !updating && (
+          <div className="flex-shrink-0 bg-accent-green/10 border-b border-accent-green/20 px-4 md:px-6 py-2 flex items-center gap-3">
+            <ArrowUpCircle size={16} className="text-accent-green flex-shrink-0" />
+            <span className="text-sm text-gray-300 flex-1">
+              <span className="font-medium text-white">{versionData.latest}</span> is available.
+            </span>
+            <button
+              onClick={() => updateMut.mutate()}
+              disabled={updateMut.isPending}
+              className="btn-primary text-xs px-3 py-1 flex items-center gap-1.5 flex-shrink-0"
+            >
+              <ArrowUpCircle size={13} />
+              {updateMut.isPending ? "Starting…" : "Update Now"}
+            </button>
+            <button
+              onClick={() => handleTabClick("settings")}
+              className="text-xs text-accent-green hover:text-green-300 flex-shrink-0"
+            >
+              Details
+            </button>
+            <button
+              onClick={() => setUpdateDismissed(true)}
+              className="btn-ghost p-1 rounded flex-shrink-0 text-gray-500 hover:text-gray-300"
+              title="Dismiss"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
 
         <main className="flex-1 overflow-y-auto p-4 md:p-6">
           {activeTab === "overview" && <Overview />}

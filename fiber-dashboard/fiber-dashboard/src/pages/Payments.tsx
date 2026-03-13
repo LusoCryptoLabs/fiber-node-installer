@@ -1,23 +1,12 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Zap, Send, RefreshCw, CheckCircle, XCircle, Clock, Trash2 } from "lucide-react";
+import { Zap, Send, RefreshCw, CheckCircle, XCircle, Clock, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { api } from "../api.js";
+import { useStore } from "../useStore.js";
 import { shannonsToCkb, ckbToShannons } from "../types.js";
 import type { SessionPayment } from "../types.js";
 
-const PAYMENTS_KEY = "fiber_payment_history";
 const MAX_PAYMENTS = 200;
-
-function loadPayments(): SessionPayment[] {
-  try {
-    const raw = localStorage.getItem(PAYMENTS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
-}
-
-function savePayments(payments: SessionPayment[]) {
-  localStorage.setItem(PAYMENTS_KEY, JSON.stringify(payments.slice(0, MAX_PAYMENTS)));
-}
 
 function StatusIcon({ status }: { status: SessionPayment["status"] }) {
   switch (status) {
@@ -62,11 +51,15 @@ function PaymentPoller({
     },
   });
 
-  if (data) {
-    if (data.status === "Success") onUpdate(paymentHash, "Success");
-    else if (data.status === "Failed") onUpdate(paymentHash, "Failed", data.failed_error ?? "Payment failed");
-    else if (data.status === "InFlight") onUpdate(paymentHash, "InFlight");
-  }
+  const lastReported = useRef<string | null>(null);
+  useEffect(() => {
+    if (data && data.status !== lastReported.current) {
+      lastReported.current = data.status;
+      if (data.status === "Success") onUpdate(paymentHash, "Success");
+      else if (data.status === "Failed") onUpdate(paymentHash, "Failed", data.failed_error ?? "Payment failed");
+      else if (data.status === "InFlight") onUpdate(paymentHash, "InFlight");
+    }
+  }, [data, paymentHash, onUpdate]);
 
   return null;
 }
@@ -77,23 +70,20 @@ export default function Payments() {
   const [manualPeerPubkey, setManualPeerPubkey] = useState("");
   const [manualAmountCkb, setManualAmountCkb] = useState("");
   const [maxFeeCkb, setMaxFeeCkb] = useState("0.01");
-  const [sessionPayments, setSessionPayments] = useState<SessionPayment[]>(loadPayments);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [sessionPayments, setSessionPayments, storeLoaded] = useStore<SessionPayment[]>("payments", []);
 
   const persistPayments = useCallback((updater: (prev: SessionPayment[]) => SessionPayment[]) => {
-    setSessionPayments((prev) => {
-      const next = updater(prev);
-      savePayments(next);
-      return next;
-    });
-  }, []);
+    setSessionPayments((prev) => updater(prev).slice(0, MAX_PAYMENTS));
+  }, [setSessionPayments]);
 
-  const updatePayment = (hash: string, status: SessionPayment["status"], error?: string) => {
+  const updatePayment = useCallback((hash: string, status: SessionPayment["status"], error?: string) => {
     persistPayments((prev) =>
       prev.map((p) =>
         p.payment_hash === hash ? { ...p, status, lastError: error } : p
       )
     );
-  };
+  }, [persistPayments]);
 
   const sendMut = useMutation({
     mutationFn: () => {
@@ -129,6 +119,14 @@ export default function Payments() {
   const inFlightHashes = sessionPayments
     .filter((p) => p.status === "Created" || p.status === "InFlight")
     .map((p) => p.payment_hash);
+
+  if (!storeLoaded) {
+    return (
+      <div className="flex items-center justify-center h-64 text-gray-500">
+        <RefreshCw size={20} className="animate-spin mr-2" /> Loading…
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -204,18 +202,32 @@ export default function Payments() {
           </div>
         )}
 
-        <div>
-          <label className="label">Max Fee (CKB)</label>
-          <input
-            className="input w-40"
-            type="number"
-            min="0"
-            step="0.001"
-            value={maxFeeCkb}
-            onChange={(e) => setMaxFeeCkb(e.target.value)}
-            data-testid="input-max-fee"
-          />
-        </div>
+        <button
+          type="button"
+          onClick={() => setShowAdvanced((v) => !v)}
+          className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+        >
+          {showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          Advanced
+        </button>
+
+        {showAdvanced && (
+          <div>
+            <label className="label">Max Routing Fee (CKB)</label>
+            <input
+              className="input w-40"
+              type="number"
+              min="0"
+              step="0.001"
+              value={maxFeeCkb}
+              onChange={(e) => setMaxFeeCkb(e.target.value)}
+              data-testid="input-max-fee"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Maximum fee you're willing to pay for routing through the Lightning network. Default 0.01 CKB is fine for most payments.
+            </p>
+          </div>
+        )}
 
         <button
           onClick={() => sendMut.mutate()}

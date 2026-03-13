@@ -126,4 +126,6 @@ export const api = {
       releaseNotes?: string;
       error?: string;
     }>("/api/version/check"),
+  triggerUpdate: () =>
+    apiFetch<{ ok: boolean; message: string }>("/api/update", { method: "POST" }),
 };

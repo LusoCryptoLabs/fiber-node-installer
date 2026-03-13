@@ -52,6 +52,10 @@ export default function SettingsPage() {
     mutationFn: () => api.health(),
   });
 
+  const updateMut = useMutation({
+    mutationFn: () => api.triggerUpdate(),
+  });
+
   const handleSave = () => {
     localStorage.setItem("fiber_rpc_override", rpcUrl);
     setSaved(true);
@@ -79,6 +83,25 @@ export default function SettingsPage() {
               <p className="text-xs text-gray-500 mt-1 line-clamp-2">{versionData.releaseNotes}</p>
             )}
             <div className="flex items-center gap-3 mt-2">
+              <button
+                onClick={() => updateMut.mutate()}
+                disabled={updateMut.isPending || updateMut.isSuccess}
+                className="btn-primary text-xs px-3 py-1.5 flex items-center gap-1.5"
+              >
+                {updateMut.isSuccess ? (
+                  <><RefreshCw size={12} className="animate-spin" /> Updating…</>
+                ) : updateMut.isPending ? (
+                  "Starting…"
+                ) : (
+                  <><ArrowUpCircle size={12} /> Update Now</>
+                )}
+              </button>
+              {updateMut.isSuccess && (
+                <span className="text-xs text-gray-400">Dashboard will restart. Refresh this page in a few seconds.</span>
+              )}
+              {updateMut.isError && (
+                <span className="text-xs text-accent-red">{(updateMut.error as Error).message}</span>
+              )}
               {versionData.releaseUrl && (
                 <a
                   href={versionData.releaseUrl}
@@ -86,12 +109,9 @@ export default function SettingsPage() {
                   rel="noopener noreferrer"
                   className="text-xs text-accent-green hover:text-green-300 flex items-center gap-1"
                 >
-                  <ExternalLink size={12} /> View release notes
+                  <ExternalLink size={12} /> Release notes
                 </a>
               )}
-              <span className="text-xs text-gray-500">
-                Run <span className="mono">./update.sh</span> or <span className="mono">.\update.ps1</span> to update
-              </span>
             </div>
           </div>
         </div>
@@ -266,7 +286,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="text-xs text-gray-600 pt-2 flex items-center gap-3">
-        <span>Fiber Dashboard {versionData?.current ?? "v1.4.0"}</span>
+        <span>Fiber Dashboard {versionData?.current ?? "v1.4.3"}</span>
         <button
           onClick={() => recheckVersion()}
           disabled={versionChecking}

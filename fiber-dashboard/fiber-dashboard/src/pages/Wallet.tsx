@@ -92,8 +92,9 @@ function SendCkbForm({ explorerBase }: { explorerBase: string }) {
                 <input className="input w-full" type="number" min="61" step="1" placeholder="100" value={amountCkb} onChange={e => setAmountCkb(e.target.value)} />
               </div>
               <div>
-                <label className="label mb-1 block">Fee (CKB)</label>
+                <label className="label mb-1 block">Tx Fee (CKB)</label>
                 <input className="input w-full" type="number" min="0.0001" step="0.0001" placeholder="0.001" value={feeCkb} onChange={e => setFeeCkb(e.target.value)} />
+                <p className="text-xs text-gray-600 mt-0.5">On-chain fee. 0.001 is usually enough.</p>
               </div>
             </div>
             <div>

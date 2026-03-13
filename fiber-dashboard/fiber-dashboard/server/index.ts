@@ -498,7 +498,7 @@ app.delete("/api/store/:key", (req, res) => {
 });
 
 // ── Auto-update checker ─────────────────────────────────────────────────────
-const CURRENT_VERSION = "v1.4.0";
+const CURRENT_VERSION = "v1.4.3";
 const GITHUB_REPO = "tecmeup123/fiber-node-installer";
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 
@@ -555,6 +555,38 @@ app.get("/api/version/check", async (_req, res) => {
       error: err instanceof Error ? err.message : "Failed to check for updates",
     });
   }
+});
+
+// ── One-click update ─────────────────────────────────────────────────────────
+const INSTALL_DIR = join(__dirname, "../../.."); // e.g. C:\Users\...\fiber-node
+
+app.post("/api/update", (_req, res) => {
+  const isWin = process.platform === "win32";
+  const script = isWin
+    ? join(INSTALL_DIR, "update.ps1")
+    : join(INSTALL_DIR, "update.sh");
+
+  if (!existsSync(script)) {
+    res.status(404).json({ error: `Update script not found: ${script}` });
+    return;
+  }
+
+  res.json({ ok: true, message: "Update started. The dashboard will restart automatically." });
+
+  // Spawn detached so it survives the dashboard process being killed
+  const child = isWin
+    ? spawn("powershell", ["-ExecutionPolicy", "Bypass", "-File", script], {
+        detached: true,
+        stdio: "ignore",
+        cwd: INSTALL_DIR,
+      })
+    : spawn("bash", [script], {
+        detached: true,
+        stdio: "ignore",
+        cwd: INSTALL_DIR,
+      });
+
+  child.unref();
 });
 
 if (IS_PROD) {
