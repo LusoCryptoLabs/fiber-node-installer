@@ -308,21 +308,32 @@ Once your wallet has CKB and your node is running:
 
 ## Uninstalling
 
+> **Before you uninstall**, follow this checklist to avoid losing funds:
+>
+> 1. **Close all channels** — go to the Dashboard → Channels tab and close each channel cooperatively. This returns your funds to your on-chain wallet. Wait for each close to confirm on-chain.
+> 2. **Transfer out your CKB** — go to Dashboard → Wallet and send your on-chain balance to an external address. Your private key at `ckb\key` will be deleted permanently during uninstall.
+> 3. **Stop the node** — use the commands below to stop the node cleanly before removing files.
+>
+> Skipping these steps means your channel funds may be locked until the timeout expires, and any on-chain balance will be lost forever once the key file is deleted.
+
 ### Windows
 
-1. Open a **new** PowerShell window as Administrator — do **not** open it from inside the `fiber-node` folder, or the uninstaller will fail to delete the directory
-2. Run:
+1. Stop the node first:
+   ```powershell
+   Stop-Service FiberNetworkNode -Force
+   ```
+2. Open a **new** PowerShell window as Administrator — do **not** open it from inside the `fiber-node` folder, or the uninstaller will fail to delete the directory
+3. Run:
    ```powershell
    & "$env:USERPROFILE\fiber-node\uninstall.ps1"
    ```
-3. Click **Yes** on the UAC prompt
-4. Type `UNINSTALL` and press Enter
-
-> **Important:** If your wallet contains real CKB, transfer it out BEFORE uninstalling. Your private key at `ckb\key` will be deleted permanently.
+4. Click **Yes** on the UAC prompt
+5. Type `UNINSTALL` and press Enter
 
 ### Linux
 
 ```bash
+# Stop the node and dashboard
 sudo systemctl stop fiber-node fiber-dashboard 2>/dev/null
 sudo systemctl disable fiber-node fiber-dashboard 2>/dev/null
 sudo rm -f /etc/systemd/system/fiber-node.service /etc/systemd/system/fiber-dashboard.service
