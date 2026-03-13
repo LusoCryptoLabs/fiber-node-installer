@@ -1337,6 +1337,47 @@ else
     log "WARNING: Service status=$STATUS - check: sudo journalctl -u fiber-node"
 fi
 
+# ── Dashboard update ───────────────────────────────────────────────
+DASH_DIR="$INSTALL_DIR/dashboard/fiber-dashboard"
+if [[ -d "$DASH_DIR" ]]; then
+    DASH_REPO="tecmeup123/fiber-node-installer"
+    DASH_RELEASE=$(curl -sSf "https://api.github.com/repos/$DASH_REPO/releases/latest" 2>/dev/null || true)
+    DASH_LATEST=$(echo "$DASH_RELEASE" | grep '"tag_name"' | sed 's/.*"tag_name": *"\(.*\)".*/\1/')
+    if [[ -n "$DASH_LATEST" ]]; then
+        # Get current dashboard version
+        DASH_CURRENT="unknown"
+        if [[ -f "$DASH_DIR/server/index.ts" ]]; then
+            DASH_CURRENT=$(grep 'CURRENT_VERSION' "$DASH_DIR/server/index.ts" | sed 's/.*"\(v[^"]*\)".*/\1/' | head -1)
+        fi
+        if [[ "$DASH_CURRENT" != "$DASH_LATEST" ]]; then
+            # Find dashboard zip asset URL
+            DASH_ZIP_URL=$(echo "$DASH_RELEASE" | grep '"browser_download_url"' | grep 'dashboard-' | grep '\.zip' | sed 's/.*"\(https[^"]*\)".*/\1/' | head -1)
+            if [[ -n "$DASH_ZIP_URL" ]]; then
+                log "Dashboard update: $DASH_CURRENT -> $DASH_LATEST"
+                DASH_TMP=$(mktemp -d)
+                if curl -sSfL "$DASH_ZIP_URL" -o "$DASH_TMP/dashboard.zip" 2>/dev/null; then
+                    sudo systemctl stop fiber-dashboard 2>/dev/null || true
+                    sleep 2
+                    unzip -qo "$DASH_TMP/dashboard.zip" -d "$DASH_TMP"
+                    if [[ -d "$DASH_TMP/dashboard" ]]; then
+                        cp -rf "$DASH_TMP/dashboard/"* "$INSTALL_DIR/dashboard/"
+                    fi
+                    cd "$DASH_DIR" && npm install --silent 2>/dev/null
+                    sudo systemctl start fiber-dashboard 2>/dev/null || true
+                    log "Dashboard updated to $DASH_LATEST"
+                else
+                    log "WARNING: Dashboard download failed (skipped)."
+                fi
+                rm -rf "$DASH_TMP"
+            else
+                log "No dashboard zip in release $DASH_LATEST (skipped)."
+            fi
+        else
+            log "Dashboard already at $DASH_CURRENT - no update needed."
+        fi
+    fi
+fi
+
 log "Done: fnn updated to $LATEST"
 UPDATEEOF
 

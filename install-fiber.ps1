@@ -1118,6 +1118,65 @@ if (`$svc) {
     Log "No Windows Service found - start fnn manually via start.ps1."
 }
 
+# ── Dashboard update ───────────────────────────────────────────────
+`$dashDir = "`$InstallDir\dashboard\fiber-dashboard"
+if (Test-Path `$dashDir) {
+    `$dashRepo = 'tecmeup123/fiber-node-installer'
+    try {
+        `$dashRelease = Invoke-RestMethod -UseBasicParsing -Uri "https://api.github.com/repos/`$dashRepo/releases/latest" -TimeoutSec 15
+        `$dashLatest  = `$dashRelease.tag_name
+    } catch {
+        `$dashLatest = `$null
+        Log "Could not check dashboard version (skipped)."
+    }
+    if (`$dashLatest) {
+        `$dashAsset = `$dashRelease.assets | Where-Object { `$_.name -match '^dashboard-' -and `$_.name -match '\.zip`$' } | Select-Object -First 1
+        if (`$dashAsset) {
+            # Check if dashboard needs updating
+            `$dashCurrent = 'unknown'
+            `$serverFile = "`$dashDir\server\index.ts"
+            if (Test-Path `$serverFile) {
+                `$match = Select-String -Path `$serverFile -Pattern 'CURRENT_VERSION\s*=\s*"([^"]+)"' | Select-Object -First 1
+                if (`$match) { `$dashCurrent = `$match.Matches.Groups[1].Value }
+            }
+            if (`$dashCurrent -ne `$dashLatest) {
+                Log "Dashboard update: `$dashCurrent -> `$dashLatest"
+                `$dashTmpDir = "`$InstallDir\dash-update-tmp"
+                New-Item -ItemType Directory -Force -Path `$dashTmpDir | Out-Null
+                `$dashZip = "`$dashTmpDir\dashboard.zip"
+                try {
+                    Invoke-WebRequest -UseBasicParsing -Uri `$dashAsset.browser_download_url -OutFile `$dashZip -TimeoutSec 120
+                    # Stop dashboard process
+                    Get-Process -Name node -ErrorAction SilentlyContinue |
+                        Where-Object { `$_.CommandLine -match 'server[/\\]index' } | Stop-Process -Force -ErrorAction SilentlyContinue
+                    Start-Sleep -Seconds 2
+                    # Extract and overwrite
+                    Expand-Archive -Path `$dashZip -DestinationPath `$dashTmpDir -Force
+                    `$extracted = "`$dashTmpDir\dashboard"
+                    if (Test-Path `$extracted) {
+                        Copy-Item -Path "`$extracted\*" -Destination "`$InstallDir\dashboard" -Recurse -Force
+                    }
+                    # Reinstall dependencies
+                    Push-Location `$dashDir
+                    npm install --silent 2>`$null
+                    Pop-Location
+                    # Restart dashboard (scheduled task)
+                    schtasks /Run /TN "FiberDashboard" 2>`$null
+                    Log "Dashboard updated to `$dashLatest"
+                } catch {
+                    Log "WARNING: Dashboard update failed: `$_"
+                } finally {
+                    Remove-Item `$dashTmpDir -Recurse -Force -ErrorAction SilentlyContinue
+                }
+            } else {
+                Log "Dashboard already at `$dashCurrent - no update needed."
+            }
+        } else {
+            Log "No dashboard zip in release `$dashLatest (skipped)."
+        }
+    }
+}
+
 Log "Done: fnn updated to `$latest"
 "@ | Out-File -Encoding utf8 "$InstallDir\update.ps1" -Force
     Write-Ok "update.ps1 written to $InstallDir\update.ps1"

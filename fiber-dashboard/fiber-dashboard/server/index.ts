@@ -276,7 +276,13 @@ app.post("/api/peers/disconnect", async (req, res) => {
 
 app.post("/api/invoices/create", async (req, res) => {
   try {
-    const result = await fiber.newInvoice(req.body);
+    const body = { ...req.body };
+    // Auto-detect currency from node's chain_hash if client sent "CKB" or omitted it
+    if (!body.currency || body.currency === "CKB") {
+      const info = await fiber.getNodeInfo();
+      body.currency = info.chain_hash === MAINNET_CHAIN_HASH ? "Fibb" : "Fibt";
+    }
+    const result = await fiber.newInvoice(body);
     res.json(result);
   } catch (err) {
     handleError(res, err);
@@ -451,7 +457,7 @@ app.get("/api/graph/channels", async (req, res) => {
 });
 
 // ── Auto-update checker ─────────────────────────────────────────────────────
-const CURRENT_VERSION = "v1.2.0";
+const CURRENT_VERSION = "v1.3.0";
 const GITHUB_REPO = "tecmeup123/fiber-node-installer";
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 

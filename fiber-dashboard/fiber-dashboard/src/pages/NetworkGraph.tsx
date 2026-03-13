@@ -220,6 +220,17 @@ export default function NetworkGraph() {
         )}
       </div>
 
+      {!isLoading && allNodes.length > 0 && allNodes.length <= 5 && (
+        <div className="bg-blue-900/20 border border-blue-800/30 rounded-lg px-4 py-3 text-sm text-blue-300 flex items-start gap-2">
+          <Network size={16} className="flex-shrink-0 mt-0.5" />
+          <div>
+            <span className="font-medium">Still discovering the network.</span>{" "}
+            Your node learns about other nodes through gossip from its peers. This can take up to an hour after first start.
+            Connect to more peers to speed up discovery.
+          </div>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="card flex items-center justify-center" style={{ height: 540 }}>
           <RefreshCw size={20} className="animate-spin text-gray-500 mr-2" />
