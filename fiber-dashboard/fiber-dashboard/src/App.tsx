@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard,
+  Activity,
   GitFork,
   Zap,
   FileText,
@@ -11,8 +12,11 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  Menu,
 } from "lucide-react";
 import { api } from "./api.js";
+import { evaluateRules } from "./monitor/rules.js";
+import Monitor from "./pages/Monitor.js";
 import Overview from "./pages/Overview.js";
 import Channels from "./pages/Channels.js";
 import Payments from "./pages/Payments.js";
@@ -24,6 +28,7 @@ import SettingsPage from "./pages/Settings.js";
 
 type TabId =
   | "overview"
+  | "monitor"
   | "channels"
   | "payments"
   | "invoices"
@@ -34,6 +39,7 @@ type TabId =
 
 const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: "overview", label: "Overview", icon: <LayoutDashboard size={18} /> },
+  { id: "monitor", label: "Monitor", icon: <Activity size={18} /> },
   { id: "channels", label: "Channels", icon: <GitFork size={18} /> },
   { id: "payments", label: "Payments", icon: <Zap size={18} /> },
   { id: "invoices", label: "Invoices", icon: <FileText size={18} /> },
@@ -46,6 +52,7 @@ const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const { data: nodeInfo, isError } = useQuery({
     queryKey: ["node-info"],
@@ -54,7 +61,39 @@ export default function App() {
     retry: false,
   });
 
+  const { data: channelsData } = useQuery({
+    queryKey: ["channels"],
+    queryFn: api.getChannels,
+    refetchInterval: 30_000,
+  });
+
+  const { data: peersData } = useQuery({
+    queryKey: ["peers"],
+    queryFn: api.getPeers,
+    refetchInterval: 30_000,
+  });
+
+  const { data: healthData } = useQuery({
+    queryKey: ["health"],
+    queryFn: api.health,
+    refetchInterval: 60_000,
+  });
+
   const isOnline = !isError && !!nodeInfo;
+
+  // Monitor alert badge
+  const alertCounts = useMemo(() => {
+    const alerts = evaluateRules({
+      nodeInfo,
+      channels: channelsData?.channels ?? [],
+      peers: peersData?.peers ?? [],
+      health: healthData,
+    });
+    return {
+      critical: alerts.filter((a) => a.severity === "critical").length,
+      warning: alerts.filter((a) => a.severity === "warning").length,
+    };
+  }, [nodeInfo, channelsData, peersData, healthData]);
 
   // 0x92b1... = CKB mainnet (Lina), 0x10639... = CKB testnet (Aggron)
   const MAINNET_CHAIN_HASH =
@@ -67,12 +106,33 @@ export default function App() {
     return `${key.slice(0, 8)}…${key.slice(-8)}`;
   }
 
+  const monitorBadge = alertCounts.critical > 0
+    ? "bg-accent-red"
+    : alertCounts.warning > 0
+      ? "bg-accent-amber"
+      : null;
+
+  function handleTabClick(id: TabId) {
+    setActiveTab(id);
+    setMobileMenuOpen(false);
+  }
+
   return (
-    <div className="flex h-screen overflow-hidden bg-bg text-gray-200">
+    <div className="flex h-screen overflow-hidden bg-bg" style={{ color: "var(--color-text-primary)" }}>
+      {/* Mobile menu overlay */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 z-40 md:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
       <aside
-        className={`flex-shrink-0 flex flex-col bg-bg-surface border-r border-border transition-all duration-200 ${
-          sidebarOpen ? "w-52" : "w-16"
-        }`}
+        className={`flex-shrink-0 flex flex-col bg-bg-surface border-r border-border transition-all duration-200
+          ${sidebarOpen ? "w-52" : "w-16"}
+          max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:w-52
+          ${mobileMenuOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}
+        `}
       >
         <div className="flex items-center justify-between px-4 py-4 border-b border-border">
           {sidebarOpen && (
@@ -86,7 +146,7 @@ export default function App() {
           )}
           <button
             onClick={() => setSidebarOpen((v) => !v)}
-            className="btn-ghost p-1 rounded ml-auto"
+            className="btn-ghost p-1 rounded ml-auto hidden md:block"
             data-testid="button-sidebar-toggle"
           >
             {sidebarOpen ? (
@@ -95,35 +155,53 @@ export default function App() {
               <ChevronRight size={16} />
             )}
           </button>
+          <button
+            onClick={() => setMobileMenuOpen(false)}
+            className="btn-ghost p-1 rounded ml-auto md:hidden"
+          >
+            <ChevronLeft size={16} />
+          </button>
         </div>
 
-        <nav className="flex-1 py-3 space-y-0.5 px-2">
+        <nav className="flex-1 py-3 space-y-0.5 px-2 overflow-y-auto">
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabClick(tab.id)}
               data-testid={`nav-${tab.id}`}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors ${
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors relative ${
                 activeTab === tab.id
                   ? "bg-accent-green/10 text-accent-green"
                   : "text-gray-400 hover:text-gray-200 hover:bg-bg-hover"
               }`}
               title={!sidebarOpen ? tab.label : undefined}
             >
-              <span className="flex-shrink-0">{tab.icon}</span>
-              {sidebarOpen && <span>{tab.label}</span>}
+              <span className="flex-shrink-0 relative">
+                {tab.icon}
+                {tab.id === "monitor" && monitorBadge && (
+                  <span className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full ${monitorBadge} ring-2 ring-bg-surface`} />
+                )}
+              </span>
+              {(sidebarOpen || mobileMenuOpen) && (
+                <span className="flex-1">{tab.label}</span>
+              )}
+              {(sidebarOpen || mobileMenuOpen) && tab.id === "monitor" && monitorBadge && (
+                <span className={`text-xs font-medium ${alertCounts.critical > 0 ? "text-accent-red" : "text-accent-amber"}`}>
+                  {alertCounts.critical + alertCounts.warning}
+                </span>
+              )}
             </button>
           ))}
         </nav>
 
         <div className="px-3 py-3 border-t border-border">
           <div
-            className={`flex items-center gap-2 ${!sidebarOpen ? "justify-center" : ""}`}
+            className={`flex items-center gap-2 ${!sidebarOpen && !mobileMenuOpen ? "justify-center" : ""}`}
           >
             <span
               className={`w-2 h-2 rounded-full flex-shrink-0 ${isOnline ? "bg-accent-green animate-pulse" : "bg-accent-red"}`}
             />
-            {sidebarOpen && (
+            {(sidebarOpen || mobileMenuOpen) && (
               <span className="text-xs text-gray-500 truncate">
                 {isOnline ? "Online" : "Offline"}
               </span>
@@ -133,17 +211,24 @@ export default function App() {
       </aside>
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="flex-shrink-0 h-14 bg-bg-surface border-b border-border flex items-center px-6 gap-4">
-          <div className="flex-1">
+        <header className="flex-shrink-0 h-14 bg-bg-surface border-b border-border flex items-center px-4 md:px-6 gap-3 md:gap-4">
+          {/* Mobile hamburger */}
+          <button
+            onClick={() => setMobileMenuOpen(true)}
+            className="btn-ghost p-1.5 rounded md:hidden flex-shrink-0"
+          >
+            <Menu size={20} />
+          </button>
+          <div className="flex-1 min-w-0">
             {nodeInfo ? (
-              <div className="flex items-center gap-3">
-                <span className="font-semibold text-white">
+              <div className="flex items-center gap-2 md:gap-3 flex-wrap">
+                <span className="font-semibold text-white truncate">
                   {nodeInfo.node_name || "Fiber Node"}
                 </span>
-                <span className="text-xs text-gray-500 mono hidden sm:block">
+                <span className="text-xs text-gray-500 mono hidden md:block">
                   {truncatePubkey(nodeInfo.node_id)}
                 </span>
-                <span className="badge-green text-xs">
+                <span className="badge-green text-xs hidden sm:inline-flex">
                   {nodeInfo.channel_count} channels
                 </span>
                 {isMainnet !== null && (
@@ -155,12 +240,12 @@ export default function App() {
             ) : (
               <span className="text-gray-500 text-sm">
                 {isError
-                  ? "Cannot connect to Fiber node — check Settings"
+                  ? "Cannot connect — check Settings"
                   : "Connecting…"}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <span
               className={`badge ${isOnline ? "badge-green" : "badge-red"}`}
               data-testid="status-node-online"
@@ -170,8 +255,9 @@ export default function App() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-4 md:p-6">
           {activeTab === "overview" && <Overview />}
+          {activeTab === "monitor" && <Monitor />}
           {activeTab === "channels" && <Channels />}
           {activeTab === "payments" && <Payments />}
           {activeTab === "invoices" && <Invoices />}

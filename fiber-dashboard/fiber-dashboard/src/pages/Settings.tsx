@@ -163,7 +163,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="text-xs text-gray-600 pt-2">
-        Fiber Dashboard v1.0.0 · Uses @scryve-tools/ckb-fiber
+        Fiber Dashboard v1.1.0 · Uses @scryve-tools/ckb-fiber
       </div>
     </div>
   );

@@ -1,9 +1,23 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Zap, Send, RefreshCw, CheckCircle, XCircle, Clock } from "lucide-react";
+import { Zap, Send, RefreshCw, CheckCircle, XCircle, Clock, Trash2 } from "lucide-react";
 import { api } from "../api.js";
 import { shannonsToCkb, ckbToShannons } from "../types.js";
 import type { SessionPayment } from "../types.js";
+
+const PAYMENTS_KEY = "fiber_payment_history";
+const MAX_PAYMENTS = 200;
+
+function loadPayments(): SessionPayment[] {
+  try {
+    const raw = localStorage.getItem(PAYMENTS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function savePayments(payments: SessionPayment[]) {
+  localStorage.setItem(PAYMENTS_KEY, JSON.stringify(payments.slice(0, MAX_PAYMENTS)));
+}
 
 function StatusIcon({ status }: { status: SessionPayment["status"] }) {
   switch (status) {
@@ -63,10 +77,18 @@ export default function Payments() {
   const [manualPeerPubkey, setManualPeerPubkey] = useState("");
   const [manualAmountCkb, setManualAmountCkb] = useState("");
   const [maxFeeCkb, setMaxFeeCkb] = useState("0.01");
-  const [sessionPayments, setSessionPayments] = useState<SessionPayment[]>([]);
+  const [sessionPayments, setSessionPayments] = useState<SessionPayment[]>(loadPayments);
+
+  const persistPayments = useCallback((updater: (prev: SessionPayment[]) => SessionPayment[]) => {
+    setSessionPayments((prev) => {
+      const next = updater(prev);
+      savePayments(next);
+      return next;
+    });
+  }, []);
 
   const updatePayment = (hash: string, status: SessionPayment["status"], error?: string) => {
-    setSessionPayments((prev) =>
+    persistPayments((prev) =>
       prev.map((p) =>
         p.payment_hash === hash ? { ...p, status, lastError: error } : p
       )
@@ -97,7 +119,7 @@ export default function Payments() {
         status: data.status as SessionPayment["status"],
         createdAt: Date.now(),
       };
-      setSessionPayments((prev) => [newPayment, ...prev]);
+      persistPayments((prev) => [newPayment, ...prev]);
       setInvoiceStr("");
       setManualPeerPubkey("");
       setManualAmountCkb("");
@@ -210,14 +232,21 @@ export default function Payments() {
       </div>
 
       <div className="card">
-        <h2 className="section-title mb-4">This Session's Payments</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="section-title mb-0">Payment History</h2>
+          {sessionPayments.length > 0 && (
+            <button
+              onClick={() => persistPayments(() => [])}
+              className="btn-ghost text-xs flex items-center gap-1 text-gray-500"
+            >
+              <Trash2 size={12} /> Clear
+            </button>
+          )}
+        </div>
         {sessionPayments.length === 0 ? (
           <div className="text-center py-8 text-gray-500 text-sm">
             <Zap size={24} className="mx-auto mb-2 text-gray-600" />
-            No payments sent this session yet.
-            <p className="text-xs mt-1 text-gray-600">
-              Note: Fiber doesn't persist payment history across restarts.
-            </p>
+            No payments yet.
           </div>
         ) : (
           <div className="space-y-2">

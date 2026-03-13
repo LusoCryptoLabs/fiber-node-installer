@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Zap, GitFork, Users, AlertCircle, RefreshCw, TrendingUp, Activity, RotateCcw } from "lucide-react";
+import { Zap, GitFork, Users, AlertCircle, RefreshCw, TrendingUp, Activity, RotateCcw, Rocket, ArrowRight } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { api } from "../api.js";
 import { shannonsToCkb } from "../types.js";
@@ -346,13 +346,66 @@ export default function Overview() {
         </div>
       )}
 
-      {channels.length === 0 && !loadingChannels && (
-        <div className="card border-dashed border-border/50 text-center py-8">
-          <GitFork size={32} className="text-gray-600 mx-auto mb-3" />
-          <p className="text-gray-400 text-sm">No channels yet.</p>
-          <p className="text-gray-500 text-xs mt-1">
-            Go to the <span className="text-accent-green">Channels</span> tab to open your first channel.
+      {channels.length === 0 && !loadingChannels && nodeInfo && (
+        <div className="card border-dashed border-accent-green/30">
+          <div className="flex items-center gap-2 mb-4">
+            <Rocket size={18} className="text-accent-green" />
+            <h2 className="section-title mb-0">Getting Started</h2>
+          </div>
+          <p className="text-sm text-gray-400 mb-4">
+            Your node is online but not yet transacting. Follow these steps to join the Fiber network:
           </p>
+          <div className="space-y-3">
+            {[
+              {
+                step: 1,
+                title: "Fund your wallet",
+                detail: "Send testnet CKB to your node's address (shown above). You need at least 99 CKB per channel.",
+                done: false,
+              },
+              {
+                step: 2,
+                title: "Connect to a peer",
+                detail: "Go to the Peers tab and connect to a bootnode or another operator's node.",
+                done: (peersData?.peers?.length ?? 0) > 0,
+              },
+              {
+                step: 3,
+                title: "Open a channel",
+                detail: "Go to the Channels tab, pick a connected peer, and open a channel with at least 99 CKB.",
+                done: false,
+              },
+              {
+                step: 4,
+                title: "Set a fee rate",
+                detail: "In Channels, click Update on your channel to set a fee rate (e.g. 100 ppm) and start earning routing fees.",
+                done: feeRatePpm > 0,
+              },
+            ].map((s) => (
+              <div
+                key={s.step}
+                className={`flex items-start gap-3 p-3 rounded-md ${
+                  s.done ? "bg-green-900/10 border border-green-800/20" : "bg-bg-surface"
+                }`}
+              >
+                <span
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                    s.done
+                      ? "bg-accent-green text-black"
+                      : "bg-bg-hover text-gray-400 border border-border"
+                  }`}
+                >
+                  {s.done ? "\u2713" : s.step}
+                </span>
+                <div>
+                  <div className={`text-sm font-medium ${s.done ? "text-accent-green" : "text-white"}`}>
+                    {s.title}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-0.5">{s.detail}</div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { FileText, Copy, RefreshCw, CheckCircle, XCircle, Clock, Ban } from "lucide-react";
+import { FileText, Copy, RefreshCw, CheckCircle, XCircle, Clock, Ban, Trash2 } from "lucide-react";
 import { api } from "../api.js";
 import { ckbToShannons, shannonsToCkb } from "../types.js";
 import type { NewInvoiceResult, GetInvoiceResult } from "../types.js";
@@ -12,6 +12,20 @@ interface SessionInvoice {
   description?: string;
   status: string;
   createdAt: number;
+}
+
+const INVOICES_KEY = "fiber_invoice_history";
+const MAX_INVOICES = 200;
+
+function loadInvoices(): SessionInvoice[] {
+  try {
+    const raw = localStorage.getItem(INVOICES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function saveInvoices(invoices: SessionInvoice[]) {
+  localStorage.setItem(INVOICES_KEY, JSON.stringify(invoices.slice(0, MAX_INVOICES)));
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -95,10 +109,18 @@ export default function Invoices() {
   const [checkInvoiceStr, setCheckInvoiceStr] = useState("");
   const [parsedInvoice, setParsedInvoice] = useState<GetInvoiceResult | null>(null);
 
-  const [sessionInvoices, setSessionInvoices] = useState<SessionInvoice[]>([]);
+  const [sessionInvoices, setSessionInvoices] = useState<SessionInvoice[]>(loadInvoices);
+
+  const persistInvoices = useCallback((updater: (prev: SessionInvoice[]) => SessionInvoice[]) => {
+    setSessionInvoices((prev) => {
+      const next = updater(prev);
+      saveInvoices(next);
+      return next;
+    });
+  }, []);
 
   const updateInvoiceStatus = (hash: string, status: string) => {
-    setSessionInvoices((prev) =>
+    persistInvoices((prev) =>
       prev.map((inv) => (inv.payment_hash === hash ? { ...inv, status } : inv))
     );
     if (hash === generatedInvoice?.invoice.data.payment_hash) {
@@ -125,7 +147,7 @@ export default function Invoices() {
         status: "Open",
         createdAt: Date.now(),
       };
-      setSessionInvoices((prev) => [newInv, ...prev]);
+      persistInvoices((prev) => [newInv, ...prev]);
       setAmountCkb("");
       setDescription("");
     },
@@ -147,7 +169,7 @@ export default function Invoices() {
 
   const cancelMut = useMutation({
     mutationFn: (hash: string) => api.cancelInvoice(hash),
-    onSuccess: (_, hash) => {
+    onSuccess: (_: unknown, hash: string) => {
       updateInvoiceStatus(hash, "Cancelled");
     },
   });
@@ -262,14 +284,21 @@ export default function Invoices() {
 
       {/* Invoice history */}
       <div className="card">
-        <h2 className="section-title mb-4">This Session's Invoices</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="section-title mb-0">Invoice History</h2>
+          {sessionInvoices.length > 0 && (
+            <button
+              onClick={() => persistInvoices(() => [])}
+              className="btn-ghost text-xs flex items-center gap-1 text-gray-500"
+            >
+              <Trash2 size={12} /> Clear
+            </button>
+          )}
+        </div>
         {sessionInvoices.length === 0 ? (
           <div className="text-center py-8 text-gray-500 text-sm">
             <FileText size={24} className="mx-auto mb-2 text-gray-600" />
-            No invoices created this session yet.
-            <p className="text-xs mt-1 text-gray-600">
-              Note: Fiber doesn't persist invoice history across restarts.
-            </p>
+            No invoices yet.
           </div>
         ) : (
           <div className="space-y-2">

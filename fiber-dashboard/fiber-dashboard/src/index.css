@@ -2,8 +2,41 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/* ── Theme tokens ────────────────────────────────────────────────────────── */
+
+/* Dark (default) */
+:root,
+:root.dark {
+  --color-bg: #0f0f0f;
+  --color-bg-surface: #1a1a1a;
+  --color-bg-card: #1e1e1e;
+  --color-bg-hover: #252525;
+  --color-border: #2a2a2a;
+  --color-border-subtle: #222222;
+  --color-text-primary: #e5e7eb;
+  --color-text-secondary: #9ca3af;
+  --color-text-muted: #6b7280;
+  --scrollbar-track: #1a1a1a;
+  --scrollbar-thumb: #333;
+  --scrollbar-hover: #444;
   color-scheme: dark;
+}
+
+/* Light */
+:root:not(.dark) {
+  --color-bg: #f8f9fa;
+  --color-bg-surface: #ffffff;
+  --color-bg-card: #ffffff;
+  --color-bg-hover: #f0f0f0;
+  --color-border: #e0e0e0;
+  --color-border-subtle: #ebebeb;
+  --color-text-primary: #1a1a2e;
+  --color-text-secondary: #4a5568;
+  --color-text-muted: #718096;
+  --scrollbar-track: #f0f0f0;
+  --scrollbar-thumb: #c4c4c4;
+  --scrollbar-hover: #a0a0a0;
+  color-scheme: light;
 }
 
 * {
@@ -13,8 +46,8 @@
 body {
   margin: 0;
   padding: 0;
-  background-color: #0f0f0f;
-  color: #e5e7eb;
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
@@ -25,16 +58,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #1a1a1a;
+  background: var(--scrollbar-track);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #333;
+  background: var(--scrollbar-thumb);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #444;
+  background: var(--scrollbar-hover);
 }
 
 .mono {
@@ -63,7 +96,8 @@ body {
   }
 
   .btn-secondary {
-    @apply btn bg-bg-hover text-gray-200 hover:bg-gray-600 border border-border;
+    @apply btn bg-bg-hover border border-border;
+    color: var(--color-text-primary);
   }
 
   .btn-danger {
@@ -71,15 +105,26 @@ body {
   }
 
   .btn-ghost {
-    @apply btn bg-transparent text-gray-400 hover:text-gray-200 hover:bg-bg-hover;
+    @apply btn bg-transparent hover:bg-bg-hover;
+    color: var(--color-text-muted);
+  }
+
+  .btn-ghost:hover {
+    color: var(--color-text-primary);
   }
 
   .input {
-    @apply w-full bg-bg-surface border border-border rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-accent-green transition-colors;
+    @apply w-full bg-bg-surface border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-accent-green transition-colors;
+    color: var(--color-text-primary);
+  }
+
+  .input::placeholder {
+    color: var(--color-text-muted);
   }
 
   .label {
-    @apply block text-xs text-gray-400 mb-1;
+    @apply block text-xs mb-1;
+    color: var(--color-text-muted);
   }
 
   .badge {
@@ -106,16 +151,35 @@ body {
     @apply badge bg-blue-900/40 text-blue-400 border border-blue-800/50;
   }
 
+  /* Light badge overrides */
+  :root:not(.dark) .badge-green {
+    @apply bg-green-100 text-green-700 border-green-300;
+  }
+  :root:not(.dark) .badge-amber {
+    @apply bg-amber-100 text-amber-700 border-amber-300;
+  }
+  :root:not(.dark) .badge-red {
+    @apply bg-red-100 text-red-700 border-red-300;
+  }
+  :root:not(.dark) .badge-grey {
+    @apply bg-gray-100 text-gray-600 border-gray-300;
+  }
+  :root:not(.dark) .badge-blue {
+    @apply bg-blue-100 text-blue-700 border-blue-300;
+  }
+
   .stat-card {
     @apply card flex flex-col gap-1;
   }
 
   .stat-value {
-    @apply text-2xl font-bold text-gray-100;
+    @apply text-2xl font-bold;
+    color: var(--color-text-primary);
   }
 
   .stat-label {
-    @apply text-xs text-gray-500 uppercase tracking-wider;
+    @apply text-xs uppercase tracking-wider;
+    color: var(--color-text-muted);
   }
 
   .table-container {
@@ -127,15 +191,19 @@ body {
   }
 
   .table th {
-    @apply text-left text-xs text-gray-500 uppercase tracking-wider py-3 px-4 border-b border-border;
+    @apply text-left text-xs uppercase tracking-wider py-3 px-4 border-b border-border;
+    color: var(--color-text-muted);
   }
 
   .table td {
-    @apply py-3 px-4 border-b border-border/50 text-gray-300;
+    @apply py-3 px-4 border-b;
+    border-color: var(--color-border);
+    color: var(--color-text-secondary);
   }
 
   .table tr:hover td {
-    @apply bg-bg-hover/30;
+    background-color: var(--color-bg-hover);
+    opacity: 0.95;
   }
 
   .modal-overlay {
@@ -147,6 +215,7 @@ body {
   }
 
   .section-title {
-    @apply text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3;
+    @apply text-sm font-semibold uppercase tracking-wider mb-3;
+    color: var(--color-text-secondary);
   }
 }
