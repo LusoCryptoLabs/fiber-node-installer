@@ -951,14 +951,16 @@ function Install-Dashboard {
     Write-Info "Installing npm dependencies (this may take a minute)..."
     $env:npm_config_loglevel  = 'silent'
     $env:npm_config_progress  = 'false'
-    npm install 2>&1 | Out-Null
+    $env:npm_config_cache     = "$env:TEMP\fiber-npm-cache"
+    cmd /c "npm install > nul 2>&1"
     Write-Ok "npm dependencies installed."
 
     Write-Info "Building dashboard frontend..."
-    npm run build 2>&1 | Out-Null
+    cmd /c "npm run build > nul 2>&1"
     Write-Ok "Dashboard frontend built."
     Remove-Item Env:npm_config_loglevel -ErrorAction SilentlyContinue
     Remove-Item Env:npm_config_progress -ErrorAction SilentlyContinue
+    Remove-Item Env:npm_config_cache    -ErrorAction SilentlyContinue
 
     Set-Location $prevLoc
 

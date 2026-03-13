@@ -1,8 +1,12 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
 #  Scryve Fiber Node Installer
 #  Installs and configures a Fiber Network Node (fnn) on Ubuntu/Debian.
-#  Version: 1.0.0  |  Supports: mainnet + testnet
+#  Version: 1.1.0  |  Supports: mainnet + testnet
+#
+#  Usage:
+#    Install:   ./install-fiber.sh
+#    Uninstall: ./install-fiber.sh --uninstall
 # ─────────────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
@@ -16,9 +20,20 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 RESET='\033[0m'
 
-# ── Versions ──────────────────────────────────────────────────────────────────
-FNN_VERSION="v0.7.1"
-CKB_CLI_VERSION="v1.9.0"
+# ── Resolve latest release versions from GitHub API (fallback to known-good) ──
+get_latest_release() {
+  local repo="$1" fallback="$2" tag=""
+  tag=$(curl -sSf --max-time 8 "https://api.github.com/repos/${repo}/releases/latest" 2>/dev/null \
+        | grep '"tag_name"' | sed 's/.*"tag_name": *"\(.*\)".*/\1/' || true)
+  if [[ -n "$tag" ]]; then
+    echo "$tag"
+  else
+    echo "$fallback"
+  fi
+}
+
+FNN_VERSION="$(get_latest_release 'nervosnetwork/fiber' 'v0.7.1')"
+CKB_CLI_VERSION="$(get_latest_release 'nervosnetwork/ckb-cli' 'v1.9.0')"
 
 # ── Mainnet values ────────────────────────────────────────────────────────────
 MAINNET_FNN_URL="https://github.com/nervosnetwork/fiber/releases/download/${FNN_VERSION}/fnn_${FNN_VERSION}_x86_64-unknown-linux-gnu.tar.gz"
@@ -42,6 +57,71 @@ NODE_ALIAS="scryve-node"
 NODE_PASSWORD=""
 SYSTEMD_USER=""
 INSTALL_DASHBOARD=false
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Uninstall
+# ─────────────────────────────────────────────────────────────────────────────
+
+uninstall_node() {
+  echo ""
+  echo -e "${RED}${BOLD}==== Fiber Network Node Uninstaller ====${RESET}"
+  echo ""
+
+  if [[ ! -d "$INSTALL_DIR" ]]; then
+    echo "  No installation found at $INSTALL_DIR. Nothing to remove."
+    exit 0
+  fi
+
+  echo -e "${YELLOW}  This will permanently delete your node installation at:${RESET}"
+  echo "    $INSTALL_DIR"
+  echo ""
+  echo -e "${RED}  IMPORTANT: If your wallet contains CKB, transfer it out BEFORE uninstalling.${RESET}"
+  echo -e "${RED}             Private key location: $INSTALL_DIR/ckb/key${RESET}"
+  echo ""
+  read -rp "  Type UNINSTALL to confirm, or press Enter to cancel: " confirm
+  if [[ "$confirm" != "UNINSTALL" ]]; then
+    echo "  Uninstall cancelled."
+    exit 0
+  fi
+
+  # Stop and disable systemd services
+  for svc in fiber-node fiber-dashboard; do
+    if systemctl is-active --quiet "$svc" 2>/dev/null; then
+      sudo systemctl stop "$svc"
+      echo -e "${GREEN}✓${RESET}  Service $svc stopped."
+    fi
+    if systemctl is-enabled --quiet "$svc" 2>/dev/null; then
+      sudo systemctl disable "$svc"
+    fi
+    if [[ -f "/etc/systemd/system/${svc}.service" ]]; then
+      sudo rm -f "/etc/systemd/system/${svc}.service"
+      echo -e "${GREEN}✓${RESET}  Service file ${svc}.service removed."
+    fi
+  done
+  sudo systemctl daemon-reload
+
+  # Remove cron job for auto-updater
+  if crontab -l 2>/dev/null | grep -q 'fiber-node.*update\.sh'; then
+    ( crontab -l 2>/dev/null | grep -v 'fiber-node.*update\.sh' ) | crontab -
+    echo -e "${GREEN}✓${RESET}  Auto-update cron job removed."
+  fi
+
+  # Remove UFW firewall rules
+  if check_command ufw; then
+    sudo ufw delete allow 8228/tcp 2>/dev/null || true
+    sudo ufw delete deny 8227/tcp 2>/dev/null || true
+    echo -e "${GREEN}✓${RESET}  Firewall rules removed."
+  fi
+
+  # Delete installation directory
+  echo "  Deleting $INSTALL_DIR..."
+  rm -rf "$INSTALL_DIR"
+  echo -e "${GREEN}✓${RESET}  Installation directory removed."
+
+  echo ""
+  echo -e "${GREEN}Fiber Network Node has been uninstalled.${RESET}"
+  exit 0
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helper functions
@@ -81,7 +161,7 @@ error() {
 step() {
   local label="  Step $1: $2"
   local bar
-  bar=$(python3 -c "print('─' * ${#label})" 2>/dev/null || printf '─%.0s' $(seq 1 50))
+  bar=$(printf '%*s' "${#label}" '' | tr ' ' '─')
   echo ""
   echo -e "  ${CYAN}${bar}${RESET}"
   echo -e "  ${CYAN}Step ${BOLD}$1${RESET}${CYAN}  —  ${BOLD}$2${RESET}"
@@ -167,7 +247,7 @@ download() {
   local url="$1"
   local dest="$2"
   if check_command wget; then
-    wget -q --show-progress -O "$dest" "$url"
+    wget -q -O "$dest" "$url"
   elif check_command curl; then
     curl -L --progress-bar -o "$dest" "$url"
   else
@@ -232,7 +312,7 @@ preflight() {
   ok "Architecture: x86_64"
 
   # Required tools
-  for cmd in tar gzip systemctl; do
+  for cmd in tar gzip systemctl unzip sed; do
     if check_command "$cmd"; then
       ok "Found: $cmd"
     else
@@ -397,9 +477,16 @@ install_ckb_cli() {
 
   if check_command ckb-cli; then
     INSTALLED_VER=$(ckb-cli --version 2>/dev/null | head -1 || true)
-    ok "ckb-cli is already installed: $INSTALLED_VER"
-    info "Skipping download."
-    return
+    # Extract version number for comparison
+    INSTALLED_VER_NUM=$(echo "$INSTALLED_VER" | sed -n 's/.*\(v\?[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p')
+    [[ -n "$INSTALLED_VER_NUM" && "$INSTALLED_VER_NUM" != v* ]] && INSTALLED_VER_NUM="v$INSTALLED_VER_NUM"
+    if [[ "$INSTALLED_VER_NUM" == "$CKB_CLI_VERSION" ]]; then
+      ok "ckb-cli is already installed: $INSTALLED_VER"
+      info "Skipping download."
+      return
+    else
+      warn "ckb-cli installed ($INSTALLED_VER) differs from target ($CKB_CLI_VERSION). Re-downloading..."
+    fi
   fi
 
   explain "ckb-cli is a command-line tool for managing CKB wallets. You'll use it once to generate your node's private key. After that, the Fiber node uses the key directly."
@@ -439,9 +526,18 @@ install_fnn() {
 
   if [[ -f "$INSTALL_DIR/fnn" ]]; then
     EXISTING_VER=$("$INSTALL_DIR/fnn" --version 2>/dev/null || echo "unknown")
-    ok "fnn already exists: $EXISTING_VER"
-    if ! confirm "Re-download fnn ${FNN_VERSION}?"; then
+    EXISTING_VER_NUM=$(echo "$EXISTING_VER" | sed -n 's/.*\(v\?[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p')
+    [[ -n "$EXISTING_VER_NUM" && "$EXISTING_VER_NUM" != v* ]] && EXISTING_VER_NUM="v$EXISTING_VER_NUM"
+    if [[ "$EXISTING_VER_NUM" == "$FNN_VERSION" ]]; then
+      ok "fnn already installed: $EXISTING_VER (matches target $FNN_VERSION)"
       return
+    fi
+    warn "fnn installed ($EXISTING_VER) differs from target ($FNN_VERSION). Updating..."
+    # Stop running node before overwriting binary
+    if systemctl is-active --quiet fiber-node 2>/dev/null; then
+      info "Stopping running node before binary replacement..."
+      sudo systemctl stop fiber-node
+      sleep 2
     fi
   fi
 
@@ -631,64 +727,36 @@ EOF
     return
   fi
 
-  # Patch the downloaded official config with our settings.
-  # Python3 is used for reliable YAML field replacement (always available on Ubuntu).
+  # Patch the downloaded official config with our settings using sed.
   info "Patching config with your settings..."
-  python3 - "$INSTALL_DIR/config.yml" "$VPS_IP" "$NODE_ALIAS" << 'PYEOF'
-import sys, re
+  local cfg="$INSTALL_DIR/config.yml"
 
-path, vps_ip, node_alias = sys.argv[1], sys.argv[2], sys.argv[3]
-with open(path) as f:
-    c = f.read()
+  # private_key_path - ensure it points to ckb/key relative to the install dir
+  sed -i "s|^\( *private_key_path:\).*|\1 \"ckb/key\"|" "$cfg"
 
-# private_key_path - ensure it points to ckb/key relative to the install dir
-c = re.sub(r'(private_key_path:\s*).*', r'\1"ckb/key"', c)
+  # announced_node_name - remove any existing, then insert after first listening_addr
+  sed -i '/^ *announced_node_name:/d' "$cfg"
+  sed -i "0,/^ *listening_addr:/s|^\( *listening_addr:.*\)|\1\n  announced_node_name: \"${NODE_ALIAS}\"|" "$cfg"
 
-# announced_node_name - strip ALL existing occurrences first, then insert exactly one
-# after the first listening_addr line (avoids duplicates regardless of what the official config contains)
-c = re.sub(r'\n[ \t]+announced_node_name:[^\n]*', '', c)
-c = re.sub(r'([ \t]*listening_addr:[^\n]*)', rf'\1\n  announced_node_name: "{node_alias}"', c, count=1)
+  # announced_addrs - replace the block (the line + indented list items below it)
+  sed -i '/^ *announced_addrs:/,/^[^ ]/{/^ *announced_addrs:/!{/^[^ ]/!d}}' "$cfg"
+  sed -i "s|^\( *announced_addrs:\).*|\1\n    - \"/ip4/${VPS_IP}/tcp/8228\"|" "$cfg"
 
-# announced_addrs - replace whatever value is there (empty list, existing IPs, etc.)
-c = re.sub(
-    r'(\s+announced_addrs:).*?(?=\n\s+\w|\nrpc:|\Z)',
-    rf'\1\n    - "/ip4/{vps_ip}/tcp/8228"',
-    c, flags=re.DOTALL
-)
-
-# rpc listening_addr - ensure it's localhost only (never exposed to internet)
-c = re.sub(
-    r'(^rpc:\n(?:[ \t]+.*\n)*?[ \t]+listening_addr:)[ \t]*.*',
-    r'\1 "127.0.0.1:8227"',
-    c, flags=re.MULTILINE
-)
-
-with open(path, 'w') as f:
-    f.write(c)
-PYEOF
+  # rpc listening_addr - ensure it's localhost only
+  sed -i '/^rpc:/,/^[a-z]/{s|^\( *listening_addr:\).*|\1 "127.0.0.1:8227"|}' "$cfg"
 
   # Whitelist BEAF xUDT token for mainnet nodes
-  if [[ "$NETWORK" == "mainnet" ]] && ! grep -q 'udt_cfg_infos' "$INSTALL_DIR/config.yml" 2>/dev/null; then
-    python3 - "$INSTALL_DIR/config.yml" << 'BEAFEOF'
-import sys, re
-path = sys.argv[1]
-with open(path) as f:
-    c = f.read()
-beaf = """  udt_cfg_infos:
-    - name: "BEAF"
-      symbol: "BEAF"
-      decimal: 0
-      auto_accept_channel_ckb_funding_amount: "0x0"
-      script:
-        code_hash: "0x50bd8d6680b8b9cf98b73f3c08faf8b2a21914311954118ad6609be6e78a1b95"
-        hash_type: "data1"
-        args: "0xc639759e988445217e4c08b2e7b416082d9de0cb061194e2f7f35a89bb6fbf4f"
-
-"""
-c = re.sub(r'^rpc:', beaf + 'rpc:', c, count=1, flags=re.MULTILINE)
-with open(path, 'w') as f:
-    f.write(c)
-BEAFEOF
+  if [[ "$NETWORK" == "mainnet" ]] && ! grep -q 'udt_cfg_infos' "$cfg" 2>/dev/null; then
+    sed -i '/^rpc:/i\  udt_cfg_infos:\
+    - name: "BEAF"\
+      symbol: "BEAF"\
+      decimal: 0\
+      auto_accept_channel_ckb_funding_amount: "0x0"\
+      script:\
+        code_hash: "0x50bd8d6680b8b9cf98b73f3c08faf8b2a21914311954118ad6609be6e78a1b95"\
+        hash_type: "data1"\
+        args: "0xc639759e988445217e4c08b2e7b416082d9de0cb061194e2f7f35a89bb6fbf4f"\
+' "$cfg"
     ok "BEAF token whitelisted for UDT payments."
   fi
 
@@ -724,7 +792,7 @@ generate_wallet() {
   echo "$ACCOUNT_OUTPUT"
 
   # Try to extract the address and lock_arg
-  LOCK_ARG=$(echo "$ACCOUNT_OUTPUT" | grep -oP 'lock_arg: \K0x[0-9a-fA-F]+' || true)
+  LOCK_ARG=$(echo "$ACCOUNT_OUTPUT" | sed -n 's/.*lock_arg: *\(0x[0-9a-fA-F]*\).*/\1/p' | head -1)
   if [[ "$NETWORK" == "mainnet" ]]; then
     NODE_ADDRESS=$(echo "$ACCOUNT_OUTPUT" | grep -A1 'address:' | grep 'mainnet:' | awk '{print $2}' || true)
   else
@@ -748,6 +816,9 @@ generate_wallet() {
   fi
 
   # Export with retry — cap at 3 attempts
+  # Restrict umask so intermediate files are not world-readable
+  OLD_UMASK=$(umask)
+  umask 077
   EXPORT_ATTEMPTS=0
   while true; do
     EXPORT_ATTEMPTS=$((EXPORT_ATTEMPTS + 1))
@@ -770,6 +841,7 @@ generate_wallet() {
   head -n 1 "${INSTALL_DIR}/ckb/exported-key" > "${INSTALL_DIR}/ckb/key"
   rm -f "${INSTALL_DIR}/ckb/exported-key"
   chmod 600 "${INSTALL_DIR}/ckb/key"
+  umask "$OLD_UMASK"
 
   ok "Private key saved to $INSTALL_DIR/ckb/key (permissions: 600)"
   echo ""
@@ -825,9 +897,7 @@ test_node() {
   info "Starting the node for a quick test (will run for 15 seconds)..."
   echo ""
 
-  cd "$INSTALL_DIR"
-
-  # Run node in background briefly
+  # Run node in background briefly (use subshell-free approach to avoid cd side-effects)
   FIBER_SECRET_KEY_PASSWORD="$NODE_PASSWORD" RUST_LOG=warn \
     "$INSTALL_DIR/fnn" --config "$INSTALL_DIR/config.yml" -d "$INSTALL_DIR" &
   FNN_PID=$!
@@ -856,7 +926,8 @@ test_node() {
 
   if echo "$RPC_TEST" | grep -q '"result"'; then
     ok "Node started and RPC is responding!"
-    NODE_ALIAS_CONFIRMED=$(echo "$RPC_TEST" | grep -oP '"node_name"\s*:\s*"\K[^"]+' || echo "$NODE_ALIAS")
+    NODE_ALIAS_CONFIRMED=$(echo "$RPC_TEST" | sed -n 's/.*"node_name" *: *"\([^"]*\)".*/\1/p' | head -1)
+    NODE_ALIAS_CONFIRMED="${NODE_ALIAS_CONFIRMED:-$NODE_ALIAS}"
     ok "Node alias confirmed: $NODE_ALIAS_CONFIRMED"
   else
     warn "RPC test didn't get a response - the node may need more time to start."
@@ -875,6 +946,15 @@ setup_systemd() {
   explain "We'll set up the Fiber node as a systemd service. This means it starts automatically when your server boots, and restarts itself if it ever crashes - so you don't have to babysit it."
 
   SERVICE_FILE="/etc/systemd/system/fiber-node.service"
+  ENV_FILE="${INSTALL_DIR}/.env"
+
+  # Write password to a private env file (not world-readable like the systemd unit)
+  cat > "$ENV_FILE" << EOF
+FIBER_SECRET_KEY_PASSWORD=${NODE_PASSWORD}
+RUST_LOG=info
+EOF
+  chmod 600 "$ENV_FILE"
+  ok "Environment file written to $ENV_FILE (permissions: 600)"
 
   cat > /tmp/fiber-node.service << EOF
 [Unit]
@@ -888,8 +968,7 @@ Type=simple
 User=${SYSTEMD_USER}
 WorkingDirectory=${INSTALL_DIR}
 ExecStart=${INSTALL_DIR}/fnn --config ${INSTALL_DIR}/config.yml -d ${INSTALL_DIR}
-Environment="FIBER_SECRET_KEY_PASSWORD=${NODE_PASSWORD}"
-Environment="RUST_LOG=info"
+EnvironmentFile=${ENV_FILE}
 Restart=on-failure
 RestartSec=15
 StandardOutput=journal
@@ -996,7 +1075,7 @@ install_dashboard_prompt() {
     DASH_URL="https://github.com/tecmeup123/fiber-node-installer/archive/refs/heads/master.zip"
     if curl -sSfL "$DASH_URL" -o "$DASH_ZIP" 2>/dev/null || \
        wget -qO  "$DASH_ZIP" "$DASH_URL" 2>/dev/null; then
-      python3 -c "import zipfile, sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$DASH_ZIP" "$DASH_EXTRACT"
+      unzip -qo "$DASH_ZIP" -d "$DASH_EXTRACT"
       rm -f "$DASH_ZIP"
       CANDIDATE="$DASH_EXTRACT/fiber-node-installer-master/fiber-dashboard"
       if [[ -f "$CANDIDATE/fiber-dashboard/package.json" ]]; then
@@ -1047,12 +1126,11 @@ install_dashboard_prompt() {
   TSX_BIN="$DASHBOARD_APP/node_modules/.bin/tsx"
 
   info "Installing npm dependencies (this may take a minute)..."
-  cd "$DASHBOARD_APP"
-  npm install >/dev/null 2>&1
+  (cd "$DASHBOARD_APP" && npm install >/dev/null 2>&1)
   ok "npm dependencies installed."
 
   info "Building dashboard frontend..."
-  npm run build >/dev/null 2>&1
+  (cd "$DASHBOARD_APP" && npm run build >/dev/null 2>&1)
   ok "Dashboard frontend built."
 
   # Create systemd service - tsx runs the TypeScript server directly.
@@ -1071,7 +1149,9 @@ WorkingDirectory=${DASHBOARD_APP}
 ExecStart=${TSX_BIN} server/index.ts
 Environment="FIBER_RPC_URL=http://localhost:8227"
 Environment="PORT=3001"
+Environment="BIND_HOST=127.0.0.1"
 Environment="NODE_ENV=production"
+Environment="CKB_CLI_PATH=/usr/local/bin/ckb-cli"
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
@@ -1140,6 +1220,8 @@ print_summary() {
   echo "    sudo systemctl status fiber-node        - is the node running?"
   echo "    sudo systemctl restart fiber-node       - restart after config changes"
   echo "    sudo journalctl -u fiber-node -f        - watch live logs"
+  echo "    ${INSTALL_DIR}/start.sh                 - start the node manually"
+  echo "    ${INSTALL_DIR}/uninstall.sh             - uninstall the node"
   echo ""
   echo -e "  ${BOLD}Connect Scryve to this node:${RESET}"
   echo ""
@@ -1199,7 +1281,7 @@ if [[ -z "$LATEST" ]]; then
 fi
 
 VER_RAW=$("$INSTALL_DIR/fnn" --version 2>/dev/null | head -1 || true)
-CURRENT=$(echo "$VER_RAW" | grep -oP 'v?\d+\.\d+\.\d+' | head -1 || echo "")
+CURRENT=$(echo "$VER_RAW" | sed -n 's/.*\(v\?[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' | head -1)
 [[ -n "$CURRENT" && "$CURRENT" != v* ]] && CURRENT="v$CURRENT"
 [[ -z "$CURRENT" ]] && CURRENT="unknown"
 
@@ -1276,7 +1358,92 @@ UPDATEEOF
 # Main
 # ─────────────────────────────────────────────────────────────────────────────
 
+generate_helper_scripts() {
+  # Generate start.sh - for manual node launch without systemd
+  cat > "$INSTALL_DIR/start.sh" << STARTEOF
+#!/usr/bin/env bash
+# Fiber Network Node manual starter - generated by install-fiber.sh
+INSTALL_DIR="$INSTALL_DIR"
+ENV_FILE="\$INSTALL_DIR/.env"
+if [[ -f "\$ENV_FILE" ]]; then
+  set -a; source "\$ENV_FILE"; set +a
+fi
+cd "\$INSTALL_DIR"
+exec "\$INSTALL_DIR/fnn" --config "\$INSTALL_DIR/config.yml" -d "\$INSTALL_DIR" 2>&1 | tee -a fnn.log
+STARTEOF
+  chmod +x "$INSTALL_DIR/start.sh"
+  ok "start.sh written to $INSTALL_DIR/start.sh"
+
+  # Generate self-contained uninstall.sh
+  cat > "$INSTALL_DIR/uninstall.sh" << 'UNINSTEOF'
+#!/usr/bin/env bash
+# Fiber Network Node uninstaller - generated by install-fiber.sh
+set -euo pipefail
+
+INSTALL_DIR="__INSTALL_DIR__"
+
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BOLD='\033[1m'; RESET='\033[0m'
+
+echo ""
+echo -e "${RED}${BOLD}==== Fiber Network Node Uninstaller ====${RESET}"
+echo ""
+
+if [[ ! -d "$INSTALL_DIR" ]]; then
+  echo "  No installation found at $INSTALL_DIR. Nothing to remove."
+  exit 0
+fi
+
+echo -e "${YELLOW}  This will permanently delete your node at: $INSTALL_DIR${RESET}"
+echo ""
+echo -e "${RED}  IMPORTANT: If your wallet has CKB, transfer it out BEFORE uninstalling.${RESET}"
+echo -e "${RED}             Private key: $INSTALL_DIR/ckb/key${RESET}"
+echo ""
+read -rp "  Type UNINSTALL to confirm, or press Enter to cancel: " confirm
+if [[ "$confirm" != "UNINSTALL" ]]; then
+  echo "  Cancelled."; exit 0
+fi
+
+for svc in fiber-node fiber-dashboard; do
+  if systemctl is-active --quiet "$svc" 2>/dev/null; then
+    sudo systemctl stop "$svc"
+    echo -e "${GREEN}✓${RESET}  $svc stopped."
+  fi
+  if systemctl is-enabled --quiet "$svc" 2>/dev/null; then
+    sudo systemctl disable "$svc" 2>/dev/null || true
+  fi
+  if [[ -f "/etc/systemd/system/${svc}.service" ]]; then
+    sudo rm -f "/etc/systemd/system/${svc}.service"
+    echo -e "${GREEN}✓${RESET}  ${svc}.service removed."
+  fi
+done
+sudo systemctl daemon-reload
+
+if crontab -l 2>/dev/null | grep -q 'fiber-node.*update\.sh'; then
+  ( crontab -l 2>/dev/null | grep -v 'fiber-node.*update\.sh' ) | crontab -
+  echo -e "${GREEN}✓${RESET}  Auto-update cron job removed."
+fi
+
+if command -v ufw &>/dev/null; then
+  sudo ufw delete allow 8228/tcp 2>/dev/null || true
+  sudo ufw delete deny 8227/tcp 2>/dev/null || true
+  echo -e "${GREEN}✓${RESET}  Firewall rules removed."
+fi
+
+echo "  Deleting $INSTALL_DIR..."
+rm -rf "$INSTALL_DIR"
+echo -e "${GREEN}Fiber Network Node uninstalled.${RESET}"
+UNINSTEOF
+  sed -i "s|__INSTALL_DIR__|$INSTALL_DIR|g" "$INSTALL_DIR/uninstall.sh"
+  chmod +x "$INSTALL_DIR/uninstall.sh"
+  ok "uninstall.sh written to $INSTALL_DIR/uninstall.sh"
+}
+
 main() {
+  # Handle --uninstall flag
+  if [[ "${1:-}" == "--uninstall" ]] || [[ "${1:-}" == "-u" ]]; then
+    uninstall_node
+  fi
+
   preflight
   select_network
   get_node_config
@@ -1287,6 +1454,7 @@ main() {
   generate_wallet
   test_node
   setup_systemd
+  generate_helper_scripts
   first_channel_guide
   install_dashboard_prompt
   install_auto_updater
