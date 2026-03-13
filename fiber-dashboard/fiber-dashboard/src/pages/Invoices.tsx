@@ -1,7 +1,8 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { FileText, Copy, RefreshCw, CheckCircle, XCircle, Clock, Ban, Trash2 } from "lucide-react";
 import { api } from "../api.js";
+import { useStore } from "../useStore.js";
 import { ckbToShannons, shannonsToCkb } from "../types.js";
 import type { NewInvoiceResult, GetInvoiceResult } from "../types.js";
 
@@ -14,19 +15,7 @@ interface SessionInvoice {
   createdAt: number;
 }
 
-const INVOICES_KEY = "fiber_invoice_history";
 const MAX_INVOICES = 200;
-
-function loadInvoices(): SessionInvoice[] {
-  try {
-    const raw = localStorage.getItem(INVOICES_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
-}
-
-function saveInvoices(invoices: SessionInvoice[]) {
-  localStorage.setItem(INVOICES_KEY, JSON.stringify(invoices.slice(0, MAX_INVOICES)));
-}
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -92,9 +81,14 @@ function InvoiceStatusPoller({
     },
   });
 
-  if (data) {
-    onStatusChange(paymentHash, data.status);
-  }
+  const lastReported = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (data && data.status !== lastReported.current) {
+      lastReported.current = data.status;
+      onStatusChange(paymentHash, data.status);
+    }
+  }, [data, paymentHash, onStatusChange]);
 
   return null;
 }
@@ -109,24 +103,23 @@ export default function Invoices() {
   const [checkInvoiceStr, setCheckInvoiceStr] = useState("");
   const [parsedInvoice, setParsedInvoice] = useState<GetInvoiceResult | null>(null);
 
-  const [sessionInvoices, setSessionInvoices] = useState<SessionInvoice[]>(loadInvoices);
+  const [sessionInvoices, setSessionInvoices, storeLoaded] = useStore<SessionInvoice[]>("invoices", []);
 
   const persistInvoices = useCallback((updater: (prev: SessionInvoice[]) => SessionInvoice[]) => {
-    setSessionInvoices((prev) => {
-      const next = updater(prev);
-      saveInvoices(next);
-      return next;
-    });
-  }, []);
+    setSessionInvoices((prev) => updater(prev).slice(0, MAX_INVOICES));
+  }, [setSessionInvoices]);
 
-  const updateInvoiceStatus = (hash: string, status: string) => {
+  const updateInvoiceStatus = useCallback((hash: string, status: string) => {
     persistInvoices((prev) =>
       prev.map((inv) => (inv.payment_hash === hash ? { ...inv, status } : inv))
     );
-    if (hash === generatedInvoice?.invoice.data.payment_hash) {
-      if (status === "Paid" || status === "Received") setPaid(true);
-    }
-  };
+    setGeneratedInvoice((cur) => {
+      if (cur && hash === cur.invoice.data.payment_hash) {
+        if (status === "Paid" || status === "Received") setPaid(true);
+      }
+      return cur;
+    });
+  }, [persistInvoices]);
 
   const createMut = useMutation({
     mutationFn: () =>
@@ -272,7 +265,7 @@ export default function Invoices() {
             </div>
             <div className="text-xs text-gray-500 space-y-1">
               {amountAttr && (
-                <div>Amount: <span className="text-gray-300">{shannonsToCkb(BigInt(amountAttr).toString())} CKB</span></div>
+                <div>Amount: <span className="text-gray-300">{shannonsToCkb(BigInt(amountAttr || "0x0").toString())} CKB</span></div>
               )}
               {paymentHash && (
                 <div>Payment hash: <span className="mono text-gray-400">{paymentHash.slice(0, 20)}…</span></div>
@@ -295,7 +288,9 @@ export default function Invoices() {
             </button>
           )}
         </div>
-        {sessionInvoices.length === 0 ? (
+        {!storeLoaded ? (
+          <div className="text-center py-8 text-gray-500 text-sm">Loading…</div>
+        ) : sessionInvoices.length === 0 ? (
           <div className="text-center py-8 text-gray-500 text-sm">
             <FileText size={24} className="mx-auto mb-2 text-gray-600" />
             No invoices yet.
@@ -312,7 +307,7 @@ export default function Invoices() {
                   <div className="flex items-center gap-2 flex-wrap">
                     {statusBadge(inv.status)}
                     <span className="text-sm text-white font-medium">
-                      {shannonsToCkb(BigInt(inv.amount).toString())} CKB
+                      {shannonsToCkb(BigInt(inv.amount || "0x0").toString())} CKB
                     </span>
                     {inv.description && (
                       <span className="text-xs text-gray-400 italic">"{inv.description}"</span>
@@ -391,7 +386,7 @@ export default function Invoices() {
                 <>
                   <span className="text-gray-500">Amount</span>
                   <span className="text-gray-200">
-                    {shannonsToCkb(BigInt(parsedInvoice.invoice.amount).toString())} CKB
+                    {shannonsToCkb(BigInt(parsedInvoice.invoice.amount || "0x0").toString())} CKB
                   </span>
                 </>
               )}

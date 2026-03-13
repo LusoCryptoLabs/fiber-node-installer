@@ -266,7 +266,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="text-xs text-gray-600 pt-2 flex items-center gap-3">
-        <span>Fiber Dashboard {versionData?.current ?? "v1.3.0"}</span>
+        <span>Fiber Dashboard {versionData?.current ?? "v1.4.0"}</span>
         <button
           onClick={() => recheckVersion()}
           disabled={versionChecking}

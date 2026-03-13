@@ -108,6 +108,14 @@ export const api = {
       body: JSON.stringify(body),
     }),
   health: () => apiFetch<{ ok: boolean; timestamp: number; startedAt: number }>("/api/health"),
+  storeGet: <T = unknown>(key: string) => apiFetch<T>(`/api/store/${key}`),
+  storePut: <T = unknown>(key: string, value: T) =>
+    apiFetch<{ ok: boolean }>(`/api/store/${key}`, {
+      method: "PUT",
+      body: JSON.stringify(value),
+    }),
+  storeDelete: (key: string) =>
+    apiFetch<{ ok: boolean }>(`/api/store/${key}`, { method: "DELETE" }),
   checkVersion: () =>
     apiFetch<{
       current: string;

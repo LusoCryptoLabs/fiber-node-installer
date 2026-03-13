@@ -4,7 +4,7 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { spawn } from "child_process";
 import { createDecipheriv, scryptSync, createHash } from "crypto";
-import { readFileSync, writeFileSync, unlinkSync, readdirSync } from "fs";
+import { readFileSync, writeFileSync, unlinkSync, readdirSync, existsSync, mkdirSync } from "fs";
 import { tmpdir, homedir } from "os";
 import { FiberClient, FiberRpcException } from "../../ckb-fiber/index.js";
 
@@ -456,8 +456,49 @@ app.get("/api/graph/channels", async (req, res) => {
   }
 });
 
+// ── Persistent JSON store ────────────────────────────────────────────────────
+const DATA_DIR = join(__dirname, "../data");
+const STORE_FILE = join(DATA_DIR, "store.json");
+
+function readStore(): Record<string, unknown> {
+  try {
+    if (existsSync(STORE_FILE)) return JSON.parse(readFileSync(STORE_FILE, "utf-8"));
+  } catch {}
+  return {};
+}
+
+function writeStore(data: Record<string, unknown>) {
+  if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
+  writeFileSync(STORE_FILE, JSON.stringify(data, null, 2));
+}
+
+app.get("/api/store", (_req, res) => {
+  res.json(readStore());
+});
+
+app.get("/api/store/:key", (req, res) => {
+  const store = readStore();
+  const val = store[req.params.key];
+  if (val === undefined) { res.status(404).json({ error: "Key not found" }); return; }
+  res.json(val);
+});
+
+app.put("/api/store/:key", (req, res) => {
+  const store = readStore();
+  store[req.params.key] = req.body;
+  writeStore(store);
+  res.json({ ok: true });
+});
+
+app.delete("/api/store/:key", (req, res) => {
+  const store = readStore();
+  delete store[req.params.key];
+  writeStore(store);
+  res.json({ ok: true });
+});
+
 // ── Auto-update checker ─────────────────────────────────────────────────────
-const CURRENT_VERSION = "v1.3.0";
+const CURRENT_VERSION = "v1.4.0";
 const GITHUB_REPO = "tecmeup123/fiber-node-installer";
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 
