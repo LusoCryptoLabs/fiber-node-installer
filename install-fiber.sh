@@ -905,9 +905,10 @@ test_node() {
   echo ""
 
   # Run node in background briefly (use subshell-free approach to avoid cd side-effects)
+  mkdir -p "$INSTALL_DIR/data"
   FIBER_SECRET_KEY_PASSWORD="$NODE_PASSWORD" RUST_LOG=warn \
-    mkdir -p "$INSTALL_DIR/data"
-    "$INSTALL_DIR/fnn" --config "$INSTALL_DIR/config.yml" -d "$INSTALL_DIR/data" &
+    "$INSTALL_DIR/fnn" --config "$INSTALL_DIR/config.yml" -d "$INSTALL_DIR/data" \
+    >"$INSTALL_DIR/fnn-test.log" 2>&1 &
   FNN_PID=$!
 
   # Wait for it to start
@@ -940,8 +941,13 @@ test_node() {
   else
     warn "RPC test didn't get a response - the node may need more time to start."
     warn "This is sometimes normal on first run. The systemd service will handle retries."
+    if [[ -s "$INSTALL_DIR/fnn-test.log" ]]; then
+      info "Test run log (last 10 lines):"
+      tail -10 "$INSTALL_DIR/fnn-test.log" | sed 's/^/    /'
+    fi
     info "If you continue to have issues, check logs with: journalctl -u fiber-node -f"
   fi
+  rm -f "$INSTALL_DIR/fnn-test.log"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1235,10 +1241,10 @@ print_summary() {
   echo ""
   echo -e "  ${BOLD}Connect Scryve to this node:${RESET}"
   echo ""
-  echo "    Add this to your Replit Secrets:"
+  echo "    Set this environment variable in your backend:"
   echo "      FIBER_NODE_URL=http://${VPS_IP}:8227"
   echo ""
-  echo "    (Secure the connection with an SSH tunnel in production - see FIBER-NODE-SETUP.md)"
+  echo "    (Secure the connection with an SSH tunnel in production)"
   echo ""
   echo -e "  ${BOLD}Next steps:${RESET}"
   echo ""
