@@ -687,9 +687,10 @@ function Test-NodeStartup {
     $env:FIBER_SECRET_KEY_PASSWORD = $script:NodePassword
     $env:RUST_LOG = 'error'
 
+    New-Item -ItemType Directory -Force -Path "$InstallDir\data" | Out-Null
     $healthLog = "$InstallDir\fnn-healthcheck.log"
     $proc = Start-Process -FilePath "$InstallDir\fnn.exe" `
-        -ArgumentList "--config config.yml -d `"$InstallDir`"" `
+        -ArgumentList "--config config.yml -d `"$InstallDir\data`"" `
         -PassThru -WindowStyle Hidden `
         -RedirectStandardOutput $healthLog `
         -RedirectStandardError  "$InstallDir\fnn-healthcheck-err.log"
@@ -814,7 +815,7 @@ function Register-AutoStart {
 
         # Install the service
         & $nssmExe install 'FiberNetworkNode' "$InstallDir\fnn.exe" | Out-Null
-        & $nssmExe set 'FiberNetworkNode' AppParameters    "--config `"$InstallDir\config.yml`" -d `"$InstallDir`"" | Out-Null
+        & $nssmExe set 'FiberNetworkNode' AppParameters    "--config `"$InstallDir\config.yml`" -d `"$InstallDir\data`"" | Out-Null
         & $nssmExe set 'FiberNetworkNode' AppDirectory     "$InstallDir" | Out-Null
         & $nssmExe set 'FiberNetworkNode' AppEnvironmentExtra `
             "FIBER_SECRET_KEY_PASSWORD=$($script:NodePassword)" "RUST_LOG=info" | Out-Null
@@ -1232,7 +1233,8 @@ $escapedPw = $script:NodePassword.Replace("'", "''")
 Set-Location "$InstallDir"
 `$env:FIBER_SECRET_KEY_PASSWORD = '$escapedPw'
 `$env:RUST_LOG = "info"
-.\fnn.exe --config config.yml -d $InstallDir 2>&1 | Tee-Object -FilePath fnn.log
+New-Item -ItemType Directory -Force -Path "$InstallDir\data" | Out-Null
+.\fnn.exe --config config.yml -d "$InstallDir\data" 2>&1 | Tee-Object -FilePath fnn.log
 "@ | Out-File -Encoding utf8 "$InstallDir\start.ps1" -Force
 Write-Ok "start.ps1 written to $InstallDir\start.ps1"
 

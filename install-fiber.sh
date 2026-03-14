@@ -728,6 +728,8 @@ EOF
     fi
     # Substitute placeholders in the built-in fallback config
     sed -i "s|__VPS_IP__|${VPS_IP}|g; s|__NODE_ALIAS__|${NODE_ALIAS}|g" "$INSTALL_DIR/config.yml"
+    # Use absolute path for private_key_path so it works with -d data subdir
+    sed -i "s|^\( *private_key_path:\).*|\1 \"${INSTALL_DIR}/ckb/key\"|" "$INSTALL_DIR/config.yml"
     ok "Config written to $INSTALL_DIR/config.yml"
     info "Review with: cat $INSTALL_DIR/config.yml"
     return
@@ -737,8 +739,8 @@ EOF
   info "Patching config with your settings..."
   local cfg="$INSTALL_DIR/config.yml"
 
-  # private_key_path - ensure it points to ckb/key relative to the install dir
-  sed -i "s|^\( *private_key_path:\).*|\1 \"ckb/key\"|" "$cfg"
+  # private_key_path - use absolute path so it works with any -d data dir
+  sed -i "s|^\( *private_key_path:\).*|\1 \"${INSTALL_DIR}/ckb/key\"|" "$cfg"
 
   # announced_node_name - remove any existing, then insert after first listening_addr
   sed -i '/^ *announced_node_name:/d' "$cfg"
@@ -904,7 +906,8 @@ test_node() {
 
   # Run node in background briefly (use subshell-free approach to avoid cd side-effects)
   FIBER_SECRET_KEY_PASSWORD="$NODE_PASSWORD" RUST_LOG=warn \
-    "$INSTALL_DIR/fnn" --config "$INSTALL_DIR/config.yml" -d "$INSTALL_DIR" &
+    mkdir -p "$INSTALL_DIR/data"
+    "$INSTALL_DIR/fnn" --config "$INSTALL_DIR/config.yml" -d "$INSTALL_DIR/data" &
   FNN_PID=$!
 
   # Wait for it to start
@@ -972,7 +975,8 @@ Wants=network-online.target
 Type=simple
 User=${SYSTEMD_USER}
 WorkingDirectory=${INSTALL_DIR}
-ExecStart=${INSTALL_DIR}/fnn --config ${INSTALL_DIR}/config.yml -d ${INSTALL_DIR}
+ExecStartPre=/bin/mkdir -p ${INSTALL_DIR}/data
+ExecStart=${INSTALL_DIR}/fnn --config ${INSTALL_DIR}/config.yml -d ${INSTALL_DIR}/data
 EnvironmentFile=${ENV_FILE}
 Restart=on-failure
 RestartSec=15
@@ -1416,7 +1420,8 @@ if [[ -f "\$ENV_FILE" ]]; then
   set -a; source "\$ENV_FILE"; set +a
 fi
 cd "\$INSTALL_DIR"
-exec "\$INSTALL_DIR/fnn" --config "\$INSTALL_DIR/config.yml" -d "\$INSTALL_DIR" 2>&1 | tee -a fnn.log
+mkdir -p "\$INSTALL_DIR/data"
+exec "\$INSTALL_DIR/fnn" --config "\$INSTALL_DIR/config.yml" -d "\$INSTALL_DIR/data" 2>&1 | tee -a fnn.log
 STARTEOF
   chmod +x "$INSTALL_DIR/start.sh"
   ok "start.sh written to $INSTALL_DIR/start.sh"
