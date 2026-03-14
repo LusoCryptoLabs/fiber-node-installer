@@ -437,8 +437,16 @@ function Write-Config {
         $raw = (Invoke-WebRequest -UseBasicParsing -Uri $configUrl -TimeoutSec 15 -ErrorAction Stop).Content
         if ($raw -and $raw.Length -gt 100) {
             # Patch the downloaded config with our settings using regex
-            # private_key_path
-            $raw = $raw -replace '(?m)(private_key_path:\s*).*', "`${1}`"$keyPath`""
+            # private_key_path - replace if exists, add if missing
+            if ($raw -match 'private_key_path') {
+                $raw = $raw -replace '(?m)(private_key_path:\s*).*', "`${1}`"$keyPath`""
+            } else {
+                $raw = $raw -replace '(?m)(^fiber:)', "`$1`n  private_key_path: `"$keyPath`""
+            }
+            # chain - add if missing (official config may omit it)
+            if ($raw -notmatch '(?m)^\s+chain:') {
+                $raw = $raw -replace '(?m)(^fiber:)', "`$1`n  chain: $Network"
+            }
             # announced_node_name - strip ALL existing occurrences line-by-line (avoids
             # duplicates regardless of CRLF/LF or indentation), then insert exactly one
             # after the first listening_addr line in the file.
