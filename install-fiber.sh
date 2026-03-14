@@ -250,9 +250,9 @@ download() {
   local url="$1"
   local dest="$2"
   if check_command curl; then
-    curl -fL --progress-bar -o "$dest" "$url"
+    curl -fL --progress-bar --max-time 120 -o "$dest" "$url"
   elif check_command wget; then
-    wget -O "$dest" "$url"
+    wget --timeout=120 -O "$dest" "$url"
   else
     error "Neither wget nor curl found. Please install one and re-run."
     exit 1
@@ -793,11 +793,14 @@ generate_wallet() {
   echo -e "${YELLOW}  ── Your new node address ──${RESET}"
   echo ""
 
-  # Generate account and capture output
-  ACCOUNT_OUTPUT=$(ckb-cli account new 2>&1 || true)
-  echo "$ACCOUNT_OUTPUT"
+  # Generate account — run directly (NOT in a subshell) so password prompts
+  # are visible to the user.  Capture output via tee for lock_arg extraction.
+  ACCOUNT_TMPFILE=$(mktemp)
+  ckb-cli account new 2>&1 | tee "$ACCOUNT_TMPFILE" || true
+  ACCOUNT_OUTPUT=$(cat "$ACCOUNT_TMPFILE" 2>/dev/null || true)
+  rm -f "$ACCOUNT_TMPFILE"
 
-  # Try to extract the address and lock_arg
+  # Try to extract the lock_arg and address from captured output
   LOCK_ARG=$(echo "$ACCOUNT_OUTPUT" | sed -n 's/.*lock_arg: *\(0x[0-9a-fA-F]*\).*/\1/p' | head -1)
   if [[ "$NETWORK" == "mainnet" ]]; then
     NODE_ADDRESS=$(echo "$ACCOUNT_OUTPUT" | grep -A1 'address:' | grep 'mainnet:' | awk '{print $2}' || true)
@@ -806,19 +809,14 @@ generate_wallet() {
   fi
 
   echo ""
-  if [[ -n "$LOCK_ARG" ]]; then
-    echo -e "  ${BOLD}Lock arg:${RESET} ${LOCK_ARG}"
-  fi
-  if [[ -n "$NODE_ADDRESS" ]]; then
-    echo -e "  ${BOLD}${NETWORK^} address:${RESET} ${NODE_ADDRESS}"
-  fi
-  echo ""
   warn "SAVE THE OUTPUT ABOVE. If you lose this information you may not be able to recover funds."
   echo ""
 
   if [[ -z "$LOCK_ARG" ]]; then
     warn "Could not auto-detect lock_arg from ckb-cli output."
     prompt_value LOCK_ARG "Paste your lock_arg (starts with 0x) from the output above"
+  else
+    ok "Detected lock_arg: $LOCK_ARG"
   fi
 
   # Export with retry — cap at 3 attempts
@@ -828,12 +826,13 @@ generate_wallet() {
   EXPORT_ATTEMPTS=0
   while true; do
     EXPORT_ATTEMPTS=$((EXPORT_ATTEMPTS + 1))
-    info "Exporting private key - enter your keystore password when prompted..."
+    info "Exporting private key (attempt $EXPORT_ATTEMPTS/3)..."
+    echo -e "  ${BOLD}Enter the keystore password you just set above:${RESET}"
     rm -f "${INSTALL_DIR}/ckb/exported-key"
     ckb-cli account export \
       --lock-arg "${LOCK_ARG}" \
-      --extended-privkey-path "${INSTALL_DIR}/ckb/exported-key" || true
-    if [[ -f "${INSTALL_DIR}/ckb/exported-key" ]]; then
+      --extended-privkey-path "${INSTALL_DIR}/ckb/exported-key" 2>&1 || true
+    if [[ -f "${INSTALL_DIR}/ckb/exported-key" ]] && [[ -s "${INSTALL_DIR}/ckb/exported-key" ]]; then
       break
     fi
     if [[ $EXPORT_ATTEMPTS -ge 3 ]]; then
@@ -1132,11 +1131,11 @@ install_dashboard_prompt() {
   TSX_BIN="$DASHBOARD_APP/node_modules/.bin/tsx"
 
   info "Installing npm dependencies (this may take a minute)..."
-  (cd "$DASHBOARD_APP" && npm install >/dev/null 2>&1)
+  (cd "$DASHBOARD_APP" && npm install --loglevel=warn)
   ok "npm dependencies installed."
 
   info "Building dashboard frontend..."
-  (cd "$DASHBOARD_APP" && npm run build >/dev/null 2>&1)
+  (cd "$DASHBOARD_APP" && npm run build)
   ok "Dashboard frontend built."
 
   # Create systemd service - tsx runs the TypeScript server directly.
