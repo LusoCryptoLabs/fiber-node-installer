@@ -36,7 +36,7 @@ FNN_VERSION="$(get_latest_release 'nervosnetwork/fiber' 'v0.7.1')"
 CKB_CLI_VERSION="$(get_latest_release 'nervosnetwork/ckb-cli' 'v1.9.0')"
 
 # ── Mainnet values ────────────────────────────────────────────────────────────
-MAINNET_FNN_URL="https://github.com/nervosnetwork/fiber/releases/download/${FNN_VERSION}/fnn_${FNN_VERSION}_x86_64-unknown-linux-gnu.tar.gz"
+MAINNET_FNN_URL="https://github.com/nervosnetwork/fiber/releases/download/${FNN_VERSION}/fnn_${FNN_VERSION}-x86_64-linux.tar.gz"
 MAINNET_CKB_RPC="https://mainnet.ckb.dev/rpc"
 MAINNET_BOOTNODE_1="/ip4/43.199.24.44/tcp/8228/p2p/QmZ2gCTfEF6vKsiYFF2STPeA2rRLRim9nMtzfwiE7uMQ4v"
 MAINNET_BOOTNODE_2="/ip4/54.255.71.126/tcp/8228/p2p/QmcMLnWraRyxd7PFRgvn1QeYRQS2DGsP6fPFCQjtfMs5b2"
@@ -1299,7 +1299,7 @@ fi
 
 log "New release available: $CURRENT -> $LATEST"
 
-FNN_URL="https://github.com/nervosnetwork/fiber/releases/download/${LATEST}/fnn_${LATEST}_x86_64-unknown-linux-gnu.tar.gz"
+FNN_URL="https://github.com/nervosnetwork/fiber/releases/download/${LATEST}/fnn_${LATEST}-x86_64-linux.tar.gz"
 UPDATE_TMPDIR=$(mktemp -d)
 cleanup() { rm -rf "$UPDATE_TMPDIR"; }
 trap cleanup EXIT
