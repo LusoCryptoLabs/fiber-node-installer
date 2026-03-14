@@ -915,9 +915,8 @@ test_node() {
   echo ""
 
   # Run node in background briefly (use subshell-free approach to avoid cd side-effects)
-  mkdir -p "$INSTALL_DIR/data"
   FIBER_SECRET_KEY_PASSWORD="$NODE_PASSWORD" RUST_LOG=warn \
-    "$INSTALL_DIR/fnn" --config "$INSTALL_DIR/config.yml" -d "$INSTALL_DIR/data" \
+    "$INSTALL_DIR/fnn" --config "$INSTALL_DIR/config.yml" -d "$INSTALL_DIR" \
     >"$INSTALL_DIR/fnn-test.log" 2>&1 &
   FNN_PID=$!
 
@@ -991,8 +990,7 @@ Wants=network-online.target
 Type=simple
 User=${SYSTEMD_USER}
 WorkingDirectory=${INSTALL_DIR}
-ExecStartPre=/bin/mkdir -p ${INSTALL_DIR}/data
-ExecStart=${INSTALL_DIR}/fnn --config ${INSTALL_DIR}/config.yml -d ${INSTALL_DIR}/data
+ExecStart=${INSTALL_DIR}/fnn --config ${INSTALL_DIR}/config.yml -d ${INSTALL_DIR}
 EnvironmentFile=${ENV_FILE}
 Restart=on-failure
 RestartSec=15
@@ -1436,8 +1434,7 @@ if [[ -f "\$ENV_FILE" ]]; then
   set -a; source "\$ENV_FILE"; set +a
 fi
 cd "\$INSTALL_DIR"
-mkdir -p "\$INSTALL_DIR/data"
-exec "\$INSTALL_DIR/fnn" --config "\$INSTALL_DIR/config.yml" -d "\$INSTALL_DIR/data" 2>&1 | tee -a fnn.log
+exec "\$INSTALL_DIR/fnn" --config "\$INSTALL_DIR/config.yml" -d "\$INSTALL_DIR" 2>&1 | tee -a fnn.log
 STARTEOF
   chmod +x "$INSTALL_DIR/start.sh"
   ok "start.sh written to $INSTALL_DIR/start.sh"
