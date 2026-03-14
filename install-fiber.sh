@@ -33,7 +33,9 @@ get_latest_release() {
 }
 
 FNN_VERSION="$(get_latest_release 'nervosnetwork/fiber' 'v0.7.1')"
-CKB_CLI_VERSION="$(get_latest_release 'nervosnetwork/ckb-cli' 'v1.9.0')"
+# Pin ckb-cli to v1.9.0 — only used once to generate a key; v2.0.0 changed the
+# account export interface and breaks the key extraction flow below.
+CKB_CLI_VERSION="v1.9.0"
 
 # ── Mainnet values ────────────────────────────────────────────────────────────
 MAINNET_FNN_URL="https://github.com/nervosnetwork/fiber/releases/download/${FNN_VERSION}/fnn_${FNN_VERSION}-x86_64-linux.tar.gz"
