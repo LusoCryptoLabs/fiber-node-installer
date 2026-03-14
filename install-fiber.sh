@@ -740,7 +740,17 @@ EOF
   local cfg="$INSTALL_DIR/config.yml"
 
   # private_key_path - use absolute path so it works with any -d data dir
-  sed -i "s|^\( *private_key_path:\).*|\1 \"${INSTALL_DIR}/ckb/key\"|" "$cfg"
+  # Replace if exists, otherwise add under fiber: section
+  if grep -q 'private_key_path' "$cfg" 2>/dev/null; then
+    sed -i "s|^\( *private_key_path:\).*|\1 \"${INSTALL_DIR}/ckb/key\"|" "$cfg"
+  else
+    sed -i "/^fiber:/a\\  private_key_path: \"${INSTALL_DIR}/ckb/key\"" "$cfg"
+  fi
+
+  # chain - ensure it's set (official config may omit it)
+  if ! grep -q '^ *chain:' "$cfg" 2>/dev/null; then
+    sed -i "/^fiber:/a\\  chain: ${NETWORK}" "$cfg"
+  fi
 
   # announced_node_name - remove any existing, then insert after first listening_addr
   sed -i '/^ *announced_node_name:/d' "$cfg"
