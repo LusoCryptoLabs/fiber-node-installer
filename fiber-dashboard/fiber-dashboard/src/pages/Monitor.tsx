@@ -100,7 +100,7 @@ export default function Monitor() {
           <AlertTriangle size={20} />
           <span className="font-semibold">Cannot connect to Fiber node</span>
         </div>
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-text-secondary">
           Make sure your Fiber node is running and the RPC URL is correct.
         </p>
         <button onClick={() => refetch()} className="btn-secondary mt-4 text-sm">
@@ -115,7 +115,7 @@ export default function Monitor() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold text-white">Monitor</h1>
+          <h1 className="text-xl font-bold text-text-primary">Monitor</h1>
           <span className="flex items-center gap-1.5 text-xs text-accent-green">
             <span className="w-2 h-2 rounded-full bg-accent-green animate-pulse" />
             Live
@@ -149,8 +149,8 @@ export default function Monitor() {
             All systems healthy
           </span>
         )}
-        <span className="text-gray-600">|</span>
-        <span className="text-gray-500">{infoCount} info</span>
+        <span className="text-text-muted">|</span>
+        <span className="text-text-muted">{infoCount} info</span>
       </div>
 
       {/* Category sections */}
@@ -164,7 +164,7 @@ export default function Monitor() {
         return (
           <div key={cat.key} className="card">
             <div className="flex items-center gap-2 mb-3">
-              <span className="text-gray-400">{cat.icon}</span>
+              <span className="text-text-secondary">{cat.icon}</span>
               <h2 className="section-title mb-0">{cat.label}</h2>
             </div>
             <div className="space-y-2">
@@ -175,8 +175,8 @@ export default function Monitor() {
                 >
                   <SeverityIcon severity={alert.severity} />
                   <div className="min-w-0">
-                    <div className="text-sm text-white font-medium">{alert.title}</div>
-                    <div className="text-xs text-gray-400 mt-0.5">{alert.detail}</div>
+                    <div className="text-sm text-text-primary font-medium">{alert.title}</div>
+                    <div className="text-xs text-text-secondary mt-0.5">{alert.detail}</div>
                   </div>
                 </div>
               ))}
@@ -186,7 +186,7 @@ export default function Monitor() {
       })}
 
       {/* Footer */}
-      <div className="text-xs text-gray-600 text-center">
+      <div className="text-xs text-text-muted text-center">
         {lastUpdated > 0 && (
           <>Last updated: {new Date(lastUpdated).toLocaleTimeString()} &middot; </>
         )}

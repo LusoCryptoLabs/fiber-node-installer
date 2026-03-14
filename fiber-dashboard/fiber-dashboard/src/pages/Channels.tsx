@@ -69,19 +69,19 @@ function CloseChannelModal({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-white">Close Channel</h2>
+          <h2 className="text-lg font-semibold text-text-primary">Close Channel</h2>
           <button onClick={onClose} className="btn-ghost p-1">
             <X size={18} />
           </button>
         </div>
 
-        <div className="bg-amber-900/20 border border-amber-800/50 rounded-md p-3 mb-4 text-sm text-amber-400">
+        <div className="alert-amber rounded-md p-3 mb-4 text-sm text-amber-400">
           Closing a channel requires an on-chain CKB transaction. This takes ~30 seconds for cooperative close, or up to several hours for force close.
         </div>
 
-        <div className="text-sm text-gray-400 mb-4 space-y-1">
+        <div className="text-sm text-text-secondary mb-4 space-y-1">
           <div>Channel: <span className="mono">{channel.channel_id.slice(0, 20)}…</span></div>
-          <div>Local balance: <span className="text-white">{shannonsToCkb(channel.local_balance)} CKB</span></div>
+          <div>Local balance: <span className="text-text-primary">{shannonsToCkb(channel.local_balance)} CKB</span></div>
         </div>
 
         <div className="flex items-center gap-3 mb-5">
@@ -93,13 +93,13 @@ function CloseChannelModal({
             className="w-4 h-4"
             data-testid="input-force-close"
           />
-          <label htmlFor="force-close" className="text-sm text-gray-300">
+          <label htmlFor="force-close" className="text-sm text-text-primary">
             Force close (use only if peer is unresponsive — much slower)
           </label>
         </div>
 
         {closeMut.isError && (
-          <div className="bg-red-900/20 border border-red-800/50 rounded-md p-3 mb-4 text-sm text-red-400">
+          <div className="alert-red rounded-md p-3 mb-4 text-sm text-red-400">
             {(closeMut.error as Error).message}
           </div>
         )}
@@ -142,7 +142,7 @@ export default function Channels() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">Channels</h1>
+        <h1 className="text-xl font-bold text-text-primary">Channels</h1>
         <div className="flex gap-2">
           <button onClick={() => refetch()} className="btn-ghost text-xs flex items-center gap-1">
             <RefreshCw size={14} /> Refresh
@@ -173,7 +173,7 @@ export default function Channels() {
           >
             {label}
             {key !== "all" && (
-              <span className="ml-1.5 text-gray-400">
+              <span className="ml-1.5 text-text-secondary">
                 ({channels.filter((c) => c.state.state_name.toUpperCase().replace(/[^A-Z]/g, "") === key.replace(/[^A-Z]/g, "")).length})
               </span>
             )}
@@ -182,13 +182,13 @@ export default function Channels() {
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center py-16 text-gray-500">
+        <div className="flex justify-center py-16 text-text-muted">
           <RefreshCw size={20} className="animate-spin mr-2" /> Loading channels…
         </div>
       ) : filtered.length === 0 ? (
         <div className="card border-dashed border-border/50 text-center py-12">
-          <GitFork size={32} className="text-gray-600 mx-auto mb-3" />
-          <p className="text-gray-400 text-sm">No channels found.</p>
+          <GitFork size={32} className="text-text-muted mx-auto mb-3" />
+          <p className="text-text-secondary text-sm">No channels found.</p>
           <button onClick={() => setShowOpen(true)} className="btn-primary mt-4 text-sm">
             Open Your First Channel
           </button>

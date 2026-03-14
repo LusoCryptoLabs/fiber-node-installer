@@ -57,3 +57,33 @@ export interface SessionPayment {
   createdAt: number;
   lastError?: string;
 }
+
+/** A point-in-time snapshot of channel balances */
+export interface BalanceSnapshot {
+  ts: number;
+  totalLocal: string;   // decimal string shannons
+  totalRemote: string;  // decimal string shannons
+  channelCount: number;
+  channels: { id: string; local: string; remote: string }[];
+}
+
+/** A single inferred routing fee event */
+export interface FeeEvent {
+  ts: number;
+  amount: string;       // decimal string shannons (positive)
+  prevTotal: string;
+  newTotal: string;
+  channelsChanged: { id: string; delta: string }[];
+}
+
+/** Persisted balance history (server store key: "balance_history") */
+export interface BalanceHistory {
+  snapshots: BalanceSnapshot[];
+  lastSnapshotTs: number;
+}
+
+/** Persisted fee events log (server store key: "fee_events") */
+export interface FeeEventsLog {
+  events: FeeEvent[];
+  totalEarned: string;  // decimal string shannons, running total
+}

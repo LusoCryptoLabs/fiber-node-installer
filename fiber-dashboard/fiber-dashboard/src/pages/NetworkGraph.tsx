@@ -153,7 +153,7 @@ export default function NetworkGraph() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">Network Graph</h1>
+        <h1 className="text-xl font-bold text-text-primary">Network Graph</h1>
         <button
           onClick={() => { refetchNodes(); refetchChannels(); }}
           className="btn-ghost text-xs flex items-center gap-1"
@@ -164,30 +164,30 @@ export default function NetworkGraph() {
 
       <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 text-sm">
         <div className="card text-center py-3">
-          <div className="text-xl font-bold text-white">{allNodes.length}</div>
-          <div className="text-xs text-gray-500 mt-0.5">Nodes</div>
+          <div className="text-xl font-bold text-text-primary">{allNodes.length}</div>
+          <div className="text-xs text-text-muted mt-0.5">Nodes</div>
         </div>
         <div className="card text-center py-3">
-          <div className="text-xl font-bold text-white">{allEdges.length}</div>
-          <div className="text-xs text-gray-500 mt-0.5">Channels</div>
+          <div className="text-xl font-bold text-text-primary">{allEdges.length}</div>
+          <div className="text-xs text-text-muted mt-0.5">Channels</div>
         </div>
         <div className="card text-center py-3">
           <div className="text-xl font-bold text-accent-green">{activityCounts.active}</div>
-          <div className="text-xs text-gray-500 mt-0.5">Active (&lt;24h)</div>
+          <div className="text-xs text-text-muted mt-0.5">Active (&lt;24h)</div>
         </div>
         <div className="card text-center py-3">
           <div className="text-xl font-bold text-accent-amber">{activityCounts.stale}</div>
-          <div className="text-xs text-gray-500 mt-0.5">Stale (1–7d)</div>
+          <div className="text-xs text-text-muted mt-0.5">Stale (1–7d)</div>
         </div>
         <div className="card text-center py-3">
-          <div className="text-xl font-bold text-gray-500">{activityCounts.inactive}</div>
-          <div className="text-xs text-gray-500 mt-0.5">Inactive (7d+)</div>
+          <div className="text-xl font-bold text-text-muted">{activityCounts.inactive}</div>
+          <div className="text-xs text-text-muted mt-0.5">Inactive (7d+)</div>
         </div>
       </div>
 
       {/* Activity filter */}
       <div className="flex items-center gap-2">
-        <span className="text-xs text-gray-500 mr-1">Filter:</span>
+        <span className="text-xs text-text-muted mr-1">Filter:</span>
         {([
           { key: "all" as ActivityFilter, label: "All", cls: "badge-blue" },
           { key: "active" as ActivityFilter, label: "Active", cls: "badge-green" },
@@ -206,7 +206,7 @@ export default function NetworkGraph() {
 
       {/* Search */}
       <div className="relative">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
         <input
           className="input pl-8 text-sm w-full"
           placeholder="Search by node name or ID…"
@@ -214,14 +214,14 @@ export default function NetworkGraph() {
           onChange={(e) => setSearchQuery(e.target.value)}
         />
         {matchedIds && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500">
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted">
             {matchedIds.size} found
           </span>
         )}
       </div>
 
       {!isLoading && allNodes.length > 0 && allNodes.length <= 5 && (
-        <div className="bg-blue-900/20 border border-blue-800/30 rounded-lg px-4 py-3 text-sm text-blue-300 flex items-start gap-2">
+        <div className="alert-blue rounded-lg px-4 py-3 text-sm text-accent-blue flex items-start gap-2">
           <Network size={16} className="flex-shrink-0 mt-0.5" />
           <div>
             <span className="font-medium">Still discovering the network.</span>{" "}
@@ -233,13 +233,13 @@ export default function NetworkGraph() {
 
       {isLoading ? (
         <div className="card flex items-center justify-center" style={{ height: 540 }}>
-          <RefreshCw size={20} className="animate-spin text-gray-500 mr-2" />
-          <span className="text-gray-500">Loading network data…</span>
+          <RefreshCw size={20} className="animate-spin text-text-muted mr-2" />
+          <span className="text-text-muted">Loading network data…</span>
         </div>
       ) : nodes.length === 0 ? (
         <div className="card flex flex-col items-center justify-center" style={{ height: 540 }}>
-          <Network size={36} className="text-gray-600 mb-3" />
-          <p className="text-gray-400 text-sm">No network data yet. Connect to peers to populate the graph.</p>
+          <Network size={36} className="text-text-muted mb-3" />
+          <p className="text-text-secondary text-sm">No network data yet. Connect to peers to populate the graph.</p>
         </div>
       ) : (
         <div className="card p-0 overflow-hidden rounded-xl" style={{ height: 540 }}>
@@ -257,42 +257,42 @@ export default function NetworkGraph() {
       {selectedNode && (
         <div className="card">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-white">
+            <h3 className="font-semibold text-text-primary">
               {selectedNode.alias || "Unknown Node"}
               {selectedNode.isOwn && <span className="badge-green ml-2 text-xs">Your Node</span>}
             </h3>
             <button onClick={() => setSelectedNode(null)} className="btn-ghost p-1 text-sm">✕</button>
           </div>
-          <div className="text-xs text-gray-400 space-y-1.5">
+          <div className="text-xs text-text-secondary space-y-1.5">
             <div>
               <span className="label block mb-0.5">Node ID</span>
-              <span className="mono text-gray-300 break-all">{selectedNode.id}</span>
+              <span className="mono text-text-primary break-all">{selectedNode.id}</span>
             </div>
             <div className="flex items-center gap-3">
               <div>
                 <span className="label">Channels </span>
-                <span className="text-gray-300">{selectedNode.channelCount}</span>
+                <span className="text-text-primary">{selectedNode.channelCount}</span>
               </div>
               <div>
                 <span className="label">Status </span>
                 <span className={
                   selectedNode.activity === "active" ? "text-accent-green"
                   : selectedNode.activity === "stale" ? "text-accent-amber"
-                  : "text-gray-500"
+                  : "text-text-muted"
                 }>
                   {activityLabel(selectedNode.activity)}
                 </span>
               </div>
               <div>
                 <span className="label">Last seen </span>
-                <span className="text-gray-300">{timeSince(selectedNode.timestamp)}</span>
+                <span className="text-text-primary">{timeSince(selectedNode.timestamp)}</span>
               </div>
             </div>
             {selectedNode.addresses.length > 0 && (
               <div>
                 <span className="label block mb-0.5">Addresses</span>
                 {selectedNode.addresses.map((a, i) => (
-                  <div key={i} className="mono text-gray-400">{a}</div>
+                  <div key={i} className="mono text-text-secondary">{a}</div>
                 ))}
               </div>
             )}
@@ -336,7 +336,7 @@ export default function NetworkGraph() {
                     )}
                   </>
                 ) : (
-                  <span className="text-xs text-gray-500">No addresses available — cannot connect directly</span>
+                  <span className="text-xs text-text-muted">No addresses available — cannot connect directly</span>
                 )}
               </div>
             )}
@@ -347,10 +347,10 @@ export default function NetworkGraph() {
       {selectedEdge && (
         <div className="card">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-white">Channel</h3>
+            <h3 className="font-semibold text-text-primary">Channel</h3>
             <button onClick={() => setSelectedEdge(null)} className="btn-ghost p-1 text-sm">✕</button>
           </div>
-          <div className="text-xs text-gray-400 space-y-1.5">
+          <div className="text-xs text-text-secondary space-y-1.5">
             <div>
               <span className="label">Capacity </span>
               <span className="text-accent-green">
@@ -359,15 +359,15 @@ export default function NetworkGraph() {
             </div>
             <div>
               <span className="label block mb-0.5">Outpoint</span>
-              <span className="mono text-gray-400 break-all">{selectedEdge.outpoint}</span>
+              <span className="mono text-text-secondary break-all">{selectedEdge.outpoint}</span>
             </div>
             <div>
               <span className="label block mb-0.5">Node 1</span>
-              <span className="mono text-gray-400 break-all">{selectedEdge.source}</span>
+              <span className="mono text-text-secondary break-all">{selectedEdge.source}</span>
             </div>
             <div>
               <span className="label block mb-0.5">Node 2</span>
-              <span className="mono text-gray-400 break-all">{selectedEdge.target}</span>
+              <span className="mono text-text-secondary break-all">{selectedEdge.target}</span>
             </div>
           </div>
         </div>
@@ -445,6 +445,13 @@ function ForceDiagram({
     const hoverNode  = hoverNodeRef.current;
     const hoverEdge  = hoverEdgeRef.current;
 
+    const computedStyle = getComputedStyle(document.documentElement);
+    const textPrimary = computedStyle.getPropertyValue('--color-text-primary').trim();
+    const textSecondary = computedStyle.getPropertyValue('--color-text-secondary').trim();
+    const textMuted = computedStyle.getPropertyValue('--color-text-muted').trim();
+    const bgColor = computedStyle.getPropertyValue('--color-bg').trim();
+    const borderColor = computedStyle.getPropertyValue('--color-border').trim();
+
     ctx.clearRect(0, 0, W, H);
     ctx.save();
     ctx.translate(pan.x, pan.y);
@@ -478,7 +485,7 @@ function ForceDiagram({
       ctx.beginPath();
       ctx.moveTo(s.x, s.y);
       ctx.lineTo(t.x, t.y);
-      ctx.strokeStyle = isHover ? "rgba(96,165,250,0.9)" : "rgba(59,130,246,0.2)";
+      ctx.strokeStyle = isHover ? "rgba(96,165,250,0.9)" : borderColor;
       ctx.lineWidth   = isHover ? 2.5 : Math.min(5, 0.6 + count * 0.7);
       ctx.stroke();
 
@@ -545,7 +552,7 @@ function ForceDiagram({
         const label = node.alias || node.id.slice(0, 10) + "…";
         const fontSize = Math.max(8, Math.round(10 / Math.max(0.5, scale)));
         ctx.font = `${fontSize}px sans-serif`;
-        ctx.fillStyle = isDimmed ? "rgba(156,163,175,0.35)" : "#d1d5db";
+        ctx.fillStyle = isDimmed ? textMuted : textPrimary;
         ctx.fillText(label, p.x + r + 4, p.y + 4);
       }
     }
@@ -835,13 +842,13 @@ function ForceDiagram({
       />
 
       {/* Legend */}
-      <div className="absolute top-2 left-2 flex items-center gap-3 text-xs text-gray-500 select-none pointer-events-none z-10">
+      <div className="absolute top-2 left-2 flex items-center gap-3 text-xs text-text-muted select-none pointer-events-none z-10">
         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-accent-green inline-block" /> Active</span>
         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-accent-amber inline-block" /> Stale</span>
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-gray-500 inline-block" /> Inactive</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-text-muted inline-block" /> Inactive</span>
       </div>
 
-      <div className="absolute bottom-2 left-3 text-xs text-gray-700 select-none pointer-events-none">
+      <div className="absolute bottom-2 left-3 text-xs text-text-muted select-none pointer-events-none">
         Scroll to zoom · Drag background to pan · Drag nodes to rearrange · Click node or channel for details
       </div>
     </div>

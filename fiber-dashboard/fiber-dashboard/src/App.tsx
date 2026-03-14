@@ -164,7 +164,7 @@ export default function App() {
           {sidebarOpen && (
             <div className="flex items-center gap-2">
               <Zap size={20} className="text-accent-green flex-shrink-0" />
-              <span className="font-bold text-sm text-white">Fiber Node</span>
+              <span className="font-bold text-sm text-text-primary">Fiber Node</span>
             </div>
           )}
           {!sidebarOpen && (
@@ -198,7 +198,7 @@ export default function App() {
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors relative ${
                 activeTab === tab.id
                   ? "bg-accent-green/10 text-accent-green"
-                  : "text-gray-400 hover:text-gray-200 hover:bg-bg-hover"
+                  : "text-text-secondary hover:text-text-primary hover:bg-bg-hover"
               }`}
               title={!sidebarOpen ? tab.label : undefined}
             >
@@ -231,7 +231,7 @@ export default function App() {
               className={`w-2 h-2 rounded-full flex-shrink-0 ${isOnline ? "bg-accent-green animate-pulse" : "bg-accent-red"}`}
             />
             {(sidebarOpen || mobileMenuOpen) && (
-              <span className="text-xs text-gray-500 truncate">
+              <span className="text-xs text-text-muted truncate">
                 {isOnline ? "Online" : "Offline"}
               </span>
             )}
@@ -251,10 +251,10 @@ export default function App() {
           <div className="flex-1 min-w-0">
             {nodeInfo ? (
               <div className="flex items-center gap-2 md:gap-3 flex-wrap">
-                <span className="font-semibold text-white truncate">
+                <span className="font-semibold text-text-primary truncate">
                   {nodeInfo.node_name || "Fiber Node"}
                 </span>
-                <span className="text-xs text-gray-500 mono hidden md:block">
+                <span className="text-xs text-text-muted mono hidden md:block">
                   {truncatePubkey(nodeInfo.node_id)}
                 </span>
                 <span className="badge-green text-xs hidden sm:inline-flex">
@@ -267,7 +267,7 @@ export default function App() {
                 )}
               </div>
             ) : (
-              <span className="text-gray-500 text-sm">
+              <span className="text-text-muted text-sm">
                 {isError
                   ? "Cannot connect — check Settings"
                   : "Connecting…"}
@@ -287,8 +287,8 @@ export default function App() {
         {updating && (
           <div className="flex-shrink-0 bg-accent-blue/10 border-b border-accent-blue/20 px-4 md:px-6 py-2 flex items-center gap-3">
             <RefreshCw size={16} className="text-accent-blue animate-spin flex-shrink-0" />
-            <span className="text-sm text-gray-300">
-              Updating to <span className="font-medium text-white">{versionData?.latest}</span>… The dashboard will restart automatically. Refresh this page in a few seconds.
+            <span className="text-sm text-text-secondary">
+              Updating to <span className="font-medium text-text-primary">{versionData?.latest}</span>… The dashboard will restart automatically. Refresh this page in a few seconds.
             </span>
           </div>
         )}
@@ -296,8 +296,8 @@ export default function App() {
         {versionData?.updateAvailable && !updateDismissed && !updating && (
           <div className="flex-shrink-0 bg-accent-green/10 border-b border-accent-green/20 px-4 md:px-6 py-2 flex items-center gap-3">
             <ArrowUpCircle size={16} className="text-accent-green flex-shrink-0" />
-            <span className="text-sm text-gray-300 flex-1">
-              <span className="font-medium text-white">{versionData.latest}</span> is available.
+            <span className="text-sm text-text-secondary flex-1">
+              <span className="font-medium text-text-primary">{versionData.latest}</span> is available.
             </span>
             <button
               onClick={() => updateMut.mutate()}
@@ -315,7 +315,7 @@ export default function App() {
             </button>
             <button
               onClick={() => setUpdateDismissed(true)}
-              className="btn-ghost p-1 rounded flex-shrink-0 text-gray-500 hover:text-gray-300"
+              className="btn-ghost p-1 rounded flex-shrink-0 text-text-muted hover:text-text-secondary"
               title="Dismiss"
             >
               <X size={14} />

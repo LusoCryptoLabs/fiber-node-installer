@@ -17,7 +17,7 @@ function StatusIcon({ status }: { status: SessionPayment["status"] }) {
     case "InFlight":
       return <RefreshCw size={16} className="text-accent-amber animate-spin" />;
     default:
-      return <Clock size={16} className="text-gray-400" />;
+      return <Clock size={16} className="text-text-secondary" />;
   }
 }
 
@@ -122,7 +122,7 @@ export default function Payments() {
 
   if (!storeLoaded) {
     return (
-      <div className="flex items-center justify-center h-64 text-gray-500">
+      <div className="flex items-center justify-center h-64 text-text-muted">
         <RefreshCw size={20} className="animate-spin mr-2" /> Loading…
       </div>
     );
@@ -130,7 +130,7 @@ export default function Payments() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-white">Payments</h1>
+      <h1 className="text-xl font-bold text-text-primary">Payments</h1>
 
       {inFlightHashes.map((hash) => (
         <PaymentPoller key={hash} paymentHash={hash} onUpdate={updatePayment} />
@@ -157,7 +157,7 @@ export default function Payments() {
         </div>
 
         {sendMut.isError && (
-          <div className="bg-red-900/20 border border-red-800/50 rounded-md p-3 text-sm text-red-400">
+          <div className="alert-red rounded-md p-3 text-sm text-red-400">
             {(sendMut.error as Error).message}
           </div>
         )}
@@ -205,7 +205,7 @@ export default function Payments() {
         <button
           type="button"
           onClick={() => setShowAdvanced((v) => !v)}
-          className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+          className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary transition-colors"
         >
           {showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           Advanced
@@ -223,7 +223,7 @@ export default function Payments() {
               onChange={(e) => setMaxFeeCkb(e.target.value)}
               data-testid="input-max-fee"
             />
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-text-muted mt-1">
               Maximum fee you're willing to pay for routing through the Lightning network. Default 0.01 CKB is fine for most payments.
             </p>
           </div>
@@ -249,15 +249,15 @@ export default function Payments() {
           {sessionPayments.length > 0 && (
             <button
               onClick={() => persistPayments(() => [])}
-              className="btn-ghost text-xs flex items-center gap-1 text-gray-500"
+              className="btn-ghost text-xs flex items-center gap-1 text-text-muted"
             >
               <Trash2 size={12} /> Clear
             </button>
           )}
         </div>
         {sessionPayments.length === 0 ? (
-          <div className="text-center py-8 text-gray-500 text-sm">
-            <Zap size={24} className="mx-auto mb-2 text-gray-600" />
+          <div className="text-center py-8 text-text-muted text-sm">
+            <Zap size={24} className="mx-auto mb-2 text-text-muted" />
             No payments yet.
           </div>
         ) : (
@@ -270,13 +270,13 @@ export default function Payments() {
               >
                 <StatusIcon status={p.status} />
                 <div className="flex-1 min-w-0">
-                  <div className="mono text-xs text-gray-400 truncate">{p.payment_hash}</div>
+                  <div className="mono text-xs text-text-secondary truncate">{p.payment_hash}</div>
                   {p.lastError && (
                     <div className="text-xs text-accent-red mt-0.5">{p.lastError}</div>
                   )}
                 </div>
                 <StatusBadge status={p.status} />
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-text-muted">
                   {new Date(p.createdAt).toLocaleTimeString()}
                 </span>
               </div>

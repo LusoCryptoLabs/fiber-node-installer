@@ -1147,21 +1147,31 @@ if (Test-Path `$dashDir) {
                 try {
                     Invoke-WebRequest -UseBasicParsing -Uri `$dashAsset.browser_download_url -OutFile `$dashZip -TimeoutSec 120
                     # Stop dashboard process
-                    Get-Process -Name node -ErrorAction SilentlyContinue |
-                        Where-Object { `$_.CommandLine -match 'server[/\\]index' } | Stop-Process -Force -ErrorAction SilentlyContinue
-                    Start-Sleep -Seconds 2
-                    # Extract and overwrite
+                    Get-Process -Name node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+                    Start-Sleep -Seconds 3
+                    # Extract and overwrite (skip data/ to preserve user data)
                     Expand-Archive -Path `$dashZip -DestinationPath `$dashTmpDir -Force
-                    `$extracted = "`$dashTmpDir\dashboard"
-                    if (Test-Path `$extracted) {
-                        Copy-Item -Path "`$extracted\*" -Destination "`$InstallDir\dashboard" -Recurse -Force
+                    `$extracted = "`$dashTmpDir"
+                    if (Test-Path "`$extracted\fiber-dashboard") {
+                        # Copy ckb-fiber
+                        if (Test-Path "`$extracted\ckb-fiber") {
+                            Copy-Item -Path "`$extracted\ckb-fiber\*" -Destination "`$InstallDir\dashboard\ckb-fiber" -Recurse -Force
+                        }
+                        # Copy fiber-dashboard (except node_modules and data)
+                        Get-ChildItem "`$extracted\fiber-dashboard" | Where-Object { `$_.Name -notin @('node_modules','data') } | ForEach-Object {
+                            Copy-Item -Path `$_.FullName -Destination "`$dashDir\`$(`$_.Name)" -Recurse -Force
+                        }
                     }
                     # Reinstall dependencies
                     Push-Location `$dashDir
                     npm install --silent 2>`$null
                     Pop-Location
-                    # Restart dashboard (scheduled task)
-                    schtasks /Run /TN "FiberDashboard" 2>`$null
+                    # Restart dashboard
+                    `$startScript = "`$InstallDir\start-dashboard.ps1"
+                    if (Test-Path `$startScript) {
+                        Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File ```"`$startScript```"" -WindowStyle Hidden
+                        Log "Dashboard restarted."
+                    }
                     Log "Dashboard updated to `$dashLatest"
                 } catch {
                     Log "WARNING: Dashboard update failed: `$_"

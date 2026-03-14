@@ -17,6 +17,11 @@ export default {
           red: "#ef4444",
           blue: "#3b82f6",
         },
+        text: {
+          primary: "var(--color-text-primary)",
+          secondary: "var(--color-text-secondary)",
+          muted: "var(--color-text-muted)",
+        },
         border: {
           DEFAULT: "var(--color-border)",
           subtle: "var(--color-border-subtle)",

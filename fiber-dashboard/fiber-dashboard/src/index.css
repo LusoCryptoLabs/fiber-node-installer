@@ -232,4 +232,15 @@ body {
     @apply text-sm font-semibold uppercase tracking-wider mb-3;
     color: var(--color-text-secondary);
   }
+
+  /* Theme-aware alert backgrounds */
+  .alert-red    { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); }
+  .alert-amber  { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); }
+  .alert-green  { background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.2); }
+  .alert-blue   { background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.2); }
+
+  :root:not(.dark) .alert-red   { background: rgba(239,68,68,0.06); border-color: rgba(239,68,68,0.25); }
+  :root:not(.dark) .alert-amber { background: rgba(245,158,11,0.06); border-color: rgba(245,158,11,0.25); }
+  :root:not(.dark) .alert-green { background: rgba(34,197,94,0.06); border-color: rgba(34,197,94,0.25); }
+  :root:not(.dark) .alert-blue  { background: rgba(59,130,246,0.06); border-color: rgba(59,130,246,0.25); }
 }

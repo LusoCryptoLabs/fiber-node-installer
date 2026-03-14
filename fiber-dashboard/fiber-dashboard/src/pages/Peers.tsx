@@ -66,34 +66,34 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-semibold text-white">Connect to Peer</h2>
+          <h2 className="text-lg font-semibold text-text-primary">Connect to Peer</h2>
           <button onClick={onClose} className="btn-ghost p-1">✕</button>
         </div>
 
         {connected ? (
           <div className="space-y-4">
-            <div className="flex items-center gap-3 p-4 bg-green-900/20 border border-green-800/30 rounded-lg">
+            <div className="flex items-center gap-3 p-4 alert-green rounded-lg">
               <CheckCircle size={24} className="text-accent-green flex-shrink-0" />
               <div>
-                <div className="text-sm font-semibold text-white">Peer connected</div>
-                <p className="text-xs text-gray-400 mt-1">
+                <div className="text-sm font-semibold text-text-primary">Peer connected</div>
+                <p className="text-xs text-text-secondary mt-1">
                   You can now open a channel with this peer from the Peers table or the Channels tab.
                 </p>
               </div>
             </div>
-            <div className="mono text-xs text-gray-400 bg-bg-surface rounded-md p-2 break-all">
+            <div className="mono text-xs text-text-secondary bg-bg-surface rounded-md p-2 break-all">
               {address}
             </div>
             <button onClick={onClose} className="btn-primary w-full">Done</button>
           </div>
         ) : (
           <>
-        <p className="text-sm text-gray-400 mb-4">
+        <p className="text-sm text-text-secondary mb-4">
           Enter a peer's multiaddr to connect. You need to be connected to a peer before you can open a channel with them.
         </p>
 
         {connectMut.isError && (
-          <div className="bg-red-900/20 border border-red-800/50 rounded-md p-3 mb-4 text-sm text-red-400">
+          <div className="alert-red rounded-md p-3 mb-4 text-sm text-red-400">
             {(connectMut.error as Error).message}
           </div>
         )}
@@ -108,12 +108,12 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
                 className={`w-full text-left p-3 rounded-md border text-sm transition-colors ${
                   address === node.address
                     ? "border-accent-green bg-accent-green/10 text-accent-green"
-                    : "border-border bg-bg-surface text-gray-300 hover:border-gray-500"
+                    : "border-border bg-bg-surface text-text-primary hover:border-gray-500"
                 }`}
                 data-testid={`button-quick-connect-${node.peerId.slice(0, 8)}`}
               >
                 <div className="font-medium">{node.label}</div>
-                <div className="mono text-xs text-gray-500 mt-0.5 truncate">{node.address}</div>
+                <div className="mono text-xs text-text-muted mt-0.5 truncate">{node.address}</div>
               </button>
             ))}
           </div>
@@ -139,7 +139,7 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
               className="w-4 h-4"
               data-testid="input-peer-save"
             />
-            <label htmlFor="save-peer" className="text-sm text-gray-300">
+            <label htmlFor="save-peer" className="text-sm text-text-primary">
               Save as persistent peer (reconnect on restart)
             </label>
           </div>
@@ -203,7 +203,7 @@ export default function Peers() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">Peers</h1>
+        <h1 className="text-xl font-bold text-text-primary">Peers</h1>
         <div className="flex gap-2">
           <button onClick={() => refetch()} className="btn-ghost text-xs flex items-center gap-1">
             <RefreshCw size={14} /> Refresh
@@ -219,14 +219,14 @@ export default function Peers() {
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center py-16 text-gray-500">
+        <div className="flex justify-center py-16 text-text-muted">
           <RefreshCw size={20} className="animate-spin mr-2" /> Loading peers…
         </div>
       ) : peers.length === 0 ? (
         <div className="card border-dashed border-border/50 text-center py-12">
-          <Users size={32} className="text-gray-600 mx-auto mb-3" />
-          <p className="text-gray-400 text-sm">No connected peers.</p>
-          <p className="text-xs text-gray-500 mt-1">
+          <Users size={32} className="text-text-muted mx-auto mb-3" />
+          <p className="text-text-secondary text-sm">No connected peers.</p>
+          <p className="text-xs text-text-muted mt-1">
             Connect to a peer to start opening channels.
           </p>
           <button onClick={() => setShowConnect(true)} className="btn-primary mt-4 text-sm">
@@ -255,18 +255,18 @@ export default function Peers() {
                       <div>
                         <span className="mono text-xs">{truncate(peer.pubkey)}</span>
                         {gn?.node_name && (
-                          <div className="text-xs text-gray-500 mt-0.5">{gn.node_name}</div>
+                          <div className="text-xs text-text-muted mt-0.5">{gn.node_name}</div>
                         )}
                       </div>
                     </td>
                     <td>
                       <span className={activity.badge}>{activity.label}</span>
                       {gn?.timestamp && (
-                        <div className="text-xs text-gray-600 mt-0.5">{timeSince(gn.timestamp)}</div>
+                        <div className="text-xs text-text-muted mt-0.5">{timeSince(gn.timestamp)}</div>
                       )}
                     </td>
                     <td>
-                      <span className="mono text-xs text-gray-500">{peer.address}</span>
+                      <span className="mono text-xs text-text-muted">{peer.address}</span>
                     </td>
                     <td>
                       <div className="flex items-center gap-2">
@@ -301,18 +301,18 @@ export default function Peers() {
             {disconnected ? (
               <div className="flex items-center gap-3 p-4">
                 <CheckCircle size={24} className="text-accent-green" />
-                <span className="text-sm font-semibold text-white">Peer disconnected</span>
+                <span className="text-sm font-semibold text-text-primary">Peer disconnected</span>
               </div>
             ) : (
               <>
-                <h2 className="text-lg font-semibold text-white mb-3">Disconnect Peer?</h2>
-                <p className="text-sm text-gray-400 mb-4">
+                <h2 className="text-lg font-semibold text-text-primary mb-3">Disconnect Peer?</h2>
+                <p className="text-sm text-text-secondary mb-4">
                   This will disconnect from{" "}
                   <span className="mono">{truncate(confirmDisconnect.pubkey)}</span>.
                   Any open channels with this peer will be suspended until reconnection.
                 </p>
                 {disconnectMut.isError && (
-                  <div className="bg-red-900/20 border border-red-800/50 rounded-md p-3 mb-4 text-sm text-red-400">
+                  <div className="alert-red rounded-md p-3 mb-4 text-sm text-red-400">
                     {(disconnectMut.error as Error).message}
                   </div>
                 )}

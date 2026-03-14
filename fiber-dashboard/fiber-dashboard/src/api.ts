@@ -107,7 +107,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  health: () => apiFetch<{ ok: boolean; timestamp: number; startedAt: number }>("/api/health"),
+  health: () => apiFetch<{ ok: boolean; timestamp: number; startedAt: number; platform: string }>("/api/health"),
   storeGet: <T = unknown>(key: string) => apiFetch<T>(`/api/store/${key}`),
   storePut: <T = unknown>(key: string, value: T) =>
     apiFetch<{ ok: boolean }>(`/api/store/${key}`, {
@@ -116,7 +116,7 @@ export const api = {
     }),
   storeDelete: (key: string) =>
     apiFetch<{ ok: boolean }>(`/api/store/${key}`, { method: "DELETE" }),
-  checkVersion: () =>
+  checkVersion: (force = false) =>
     apiFetch<{
       current: string;
       latest: string;
@@ -125,7 +125,7 @@ export const api = {
       publishedAt?: string;
       releaseNotes?: string;
       error?: string;
-    }>("/api/version/check"),
+    }>(`/api/version/check${force ? "?force=true" : ""}`),
   triggerUpdate: () =>
     apiFetch<{ ok: boolean; message: string }>("/api/update", { method: "POST" }),
 };

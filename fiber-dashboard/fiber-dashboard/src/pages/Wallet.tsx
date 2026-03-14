@@ -65,14 +65,14 @@ function SendCkbForm({ explorerBase }: { explorerBase: string }) {
   return (
     <div className="mt-3 border border-border rounded-lg p-4 space-y-3 bg-bg-surface">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-gray-200">Send CKB</span>
-        <button onClick={() => { reset(); setOpen(false); }} className="btn-ghost p-1 text-xs text-gray-500">✕</button>
+        <span className="text-sm font-medium text-text-primary">Send CKB</span>
+        <button onClick={() => { reset(); setOpen(false); }} className="btn-ghost p-1 text-xs text-text-muted">✕</button>
       </div>
 
       {txHash ? (
         <div className="space-y-2">
           <div className="text-xs text-accent-green font-medium">Transfer submitted!</div>
-          <div className="bg-bg-surface border border-border rounded p-2 mono text-xs text-gray-300 break-all">{txHash}</div>
+          <div className="bg-bg-surface border border-border rounded p-2 mono text-xs text-text-primary break-all">{txHash}</div>
           <a href={`${explorerBase}/transaction/${txHash}`} target="_blank" rel="noopener noreferrer"
             className="text-xs text-accent-green hover:underline flex items-center gap-1">
             View on Explorer <ExternalLink size={11} />
@@ -94,18 +94,18 @@ function SendCkbForm({ explorerBase }: { explorerBase: string }) {
               <div>
                 <label className="label mb-1 block">Tx Fee (CKB)</label>
                 <input className="input w-full" type="number" min="0.0001" step="0.0001" placeholder="0.001" value={feeCkb} onChange={e => setFeeCkb(e.target.value)} />
-                <p className="text-xs text-gray-600 mt-0.5">On-chain fee. 0.001 is usually enough.</p>
+                <p className="text-xs text-text-muted mt-0.5">On-chain fee. 0.001 is usually enough.</p>
               </div>
             </div>
             <div>
               <label className="label mb-1 block">Keystore Password</label>
               <input className="input w-full" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} />
-              <p className="text-xs text-gray-600 mt-1">The password you set when the node was installed.</p>
+              <p className="text-xs text-text-muted mt-1">The password you set when the node was installed.</p>
             </div>
           </div>
 
           {error && (
-            <div className="bg-red-900/20 border border-red-800/40 rounded p-2 text-xs text-red-400 break-all">{error}</div>
+            <div className="alert-red rounded p-2 text-xs text-red-400 break-all">{error}</div>
           )}
 
           <div className="flex gap-2 pt-1">
@@ -174,7 +174,7 @@ export default function WalletPage() {
 
   if (loadingChannels && loadingWallet) {
     return (
-      <div className="flex items-center justify-center h-64 text-gray-500">
+      <div className="flex items-center justify-center h-64 text-text-muted">
         <RefreshCw size={20} className="animate-spin mr-2" /> Loading wallet…
       </div>
     );
@@ -183,7 +183,7 @@ export default function WalletPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">Wallet</h1>
+        <h1 className="text-xl font-bold text-text-primary">Wallet</h1>
         <button onClick={refetchAll} className="btn-ghost text-xs flex items-center gap-1">
           <RefreshCw size={14} /> Refresh
         </button>
@@ -201,7 +201,7 @@ export default function WalletPage() {
         </div>
 
         {walletError && (
-          <div className="bg-red-900/20 border border-red-800/40 rounded-md p-3 text-sm text-red-400">
+          <div className="alert-red rounded-md p-3 text-sm text-red-400">
             Could not derive on-chain wallet info. Make sure the Fiber node is running.
           </div>
         )}
@@ -211,11 +211,11 @@ export default function WalletPage() {
             {/* Address */}
             <div>
               <div className="label mb-1">Deposit Address</div>
-              <p className="text-xs text-gray-500 mb-2">
+              <p className="text-xs text-text-muted mb-2">
                 Send CKB here to fund channel opens and on-chain fees.
               </p>
               <div className="flex items-start gap-1 bg-bg-surface rounded-md p-2 border border-border">
-                <span className="mono text-xs text-gray-300 break-all flex-1">
+                <span className="mono text-xs text-text-primary break-all flex-1">
                   {wallet.address}
                 </span>
                 <CopyButton text={wallet.address} />
@@ -251,20 +251,20 @@ export default function WalletPage() {
                   {shannonsToCkb(onChainShannons.toString())} CKB
                 </div>
                 <div className="stat-label">On-Chain Balance (free)</div>
-                <div className="text-xs text-gray-500 mt-1">Available for opening channels</div>
+                <div className="text-xs text-text-muted mt-1">Available for opening channels</div>
               </div>
               <div className="stat-card">
-                <GitFork size={18} className="text-gray-400" />
+                <GitFork size={18} className="text-text-secondary" />
                 <div className="stat-value">
                   {shannonsToCkb(totalCapacity.toString())} CKB
                 </div>
                 <div className="stat-label">Locked in Channels</div>
-                <div className="text-xs text-gray-500 mt-1">Released when channels close</div>
+                <div className="text-xs text-text-muted mt-1">Released when channels close</div>
               </div>
             </div>
 
             {isOnChainLow && (
-              <div className="bg-amber-900/20 border border-amber-800/50 rounded-lg p-3 flex items-start gap-2">
+              <div className="alert-amber rounded-lg p-3 flex items-start gap-2">
                 <AlertTriangle size={16} className="text-accent-amber flex-shrink-0 mt-0.5" />
                 <div className="text-xs text-amber-300/90">
                   <span className="font-medium text-amber-400">Low on-chain balance.</span>{" "}
@@ -278,14 +278,14 @@ export default function WalletPage() {
           </>
         )}
 
-        <p className="text-xs text-gray-600">
+        <p className="text-xs text-text-muted">
           On-chain balance is queried live from the CKB Layer 1 network. Channel balances (below) are off-chain and managed by Fiber.
         </p>
       </div>
 
       {/* ── Channel Liquidity warning ─────────────────────────────────────── */}
       {isLowBalance && readyChannels.length > 0 && (
-        <div className="bg-amber-900/20 border border-amber-800/50 rounded-lg p-4 flex items-start gap-3">
+        <div className="alert-amber rounded-lg p-4 flex items-start gap-3">
           <AlertTriangle size={18} className="text-accent-amber flex-shrink-0 mt-0.5" />
           <div>
             <div className="text-sm font-medium text-amber-400">Low Outbound Liquidity</div>
@@ -307,7 +307,7 @@ export default function WalletPage() {
               {shannonsToCkb(totalLocal.toString())} CKB
             </div>
             <div className="stat-label">Local Balance</div>
-            <div className="text-xs text-gray-500 mt-1">Your outbound liquidity</div>
+            <div className="text-xs text-text-muted mt-1">Your outbound liquidity</div>
           </div>
           <div className="stat-card" data-testid="stat-remote-total">
             <Wallet size={18} className="text-accent-blue" />
@@ -315,15 +315,15 @@ export default function WalletPage() {
               {shannonsToCkb(totalRemote.toString())} CKB
             </div>
             <div className="stat-label">Remote Balance</div>
-            <div className="text-xs text-gray-500 mt-1">Your inbound capacity</div>
+            <div className="text-xs text-text-muted mt-1">Your inbound capacity</div>
           </div>
           <div className="stat-card" data-testid="stat-capacity-total">
-            <GitFork size={18} className="text-gray-400" />
+            <GitFork size={18} className="text-text-secondary" />
             <div className="stat-value">
               {shannonsToCkb(totalCapacity.toString())} CKB
             </div>
             <div className="stat-label">Total Capacity</div>
-            <div className="text-xs text-gray-500 mt-1">{readyChannels.length} open channels</div>
+            <div className="text-xs text-text-muted mt-1">{readyChannels.length} open channels</div>
           </div>
         </div>
       </div>
@@ -331,7 +331,7 @@ export default function WalletPage() {
       {readyChannels.length > 0 && (
         <div className="card">
           <h2 className="section-title mb-4">Channel Liquidity Breakdown</h2>
-          <div className="text-xs text-gray-500 flex gap-4 mb-4">
+          <div className="text-xs text-text-muted flex gap-4 mb-4">
             <span className="flex items-center gap-1">
               <span className="w-3 h-3 rounded-sm bg-accent-green inline-block" /> Local
             </span>
@@ -345,10 +345,10 @@ export default function WalletPage() {
               <YAxis tick={{ fill: "#6b7280", fontSize: 11 }} unit=" CKB" width={70} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "#1e1e1e",
-                  border: "1px solid #2a2a2a",
+                  backgroundColor: "var(--color-bg-card)",
+                  border: "1px solid var(--color-border)",
                   borderRadius: 6,
-                  color: "#e5e7eb",
+                  color: "var(--color-text-primary)",
                   fontSize: 12,
                 }}
                 formatter={(v: number, name: string) => [`${v.toLocaleString()} CKB`, name]}
@@ -362,9 +362,9 @@ export default function WalletPage() {
 
       {readyChannels.length === 0 && !loadingChannels && (
         <div className="card border-dashed border-border/50 text-center py-12">
-          <GitFork size={32} className="text-gray-600 mx-auto mb-3" />
-          <p className="text-gray-400 text-sm">No open channels.</p>
-          <p className="text-xs text-gray-500 mt-1">
+          <GitFork size={32} className="text-text-muted mx-auto mb-3" />
+          <p className="text-text-secondary text-sm">No open channels.</p>
+          <p className="text-xs text-text-muted mt-1">
             Open a channel to see your liquidity breakdown here.
           </p>
         </div>

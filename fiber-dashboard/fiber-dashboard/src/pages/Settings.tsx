@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Settings, CheckCircle, XCircle, Moon, Sun, ExternalLink, ArrowUpCircle, RefreshCw, Copy, Check, Heart } from "lucide-react";
 import { api } from "../api.js";
 
@@ -41,12 +41,28 @@ export default function SettingsPage() {
     localStorage.setItem("fiber_theme", theme);
   }, [theme]);
 
-  const { data: versionData, refetch: recheckVersion, isFetching: versionChecking } = useQuery({
+  const queryClient = useQueryClient();
+
+  const { data: versionData, isFetching: versionChecking } = useQuery({
     queryKey: ["version-check"],
-    queryFn: api.checkVersion,
+    queryFn: () => api.checkVersion(),
     refetchInterval: 30 * 60 * 1000, // recheck every 30 min
     staleTime: 10 * 60 * 1000,
   });
+
+  const recheckVersion = () => {
+    api.checkVersion(true).then((data) => {
+      queryClient.setQueryData(["version-check"], data);
+    });
+  };
+
+  const { data: healthData } = useQuery({
+    queryKey: ["health"],
+    queryFn: api.health,
+    staleTime: 60_000,
+  });
+
+  const isWindows = healthData?.platform === "win32";
 
   const testMut = useMutation({
     mutationFn: () => api.health(),
@@ -64,23 +80,23 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <h1 className="text-xl font-bold text-white">Settings</h1>
+      <h1 className="text-xl font-bold text-text-primary">Settings</h1>
 
       {versionData?.updateAvailable && (
         <div className="bg-accent-green/10 border border-accent-green/30 rounded-lg p-4 flex items-start gap-3">
           <ArrowUpCircle size={20} className="text-accent-green flex-shrink-0 mt-0.5" />
           <div className="flex-1 space-y-1">
-            <div className="text-sm font-semibold text-white">
+            <div className="text-sm font-semibold text-text-primary">
               Update available: {versionData.latest}
             </div>
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-text-secondary">
               You're running {versionData.current}.
               {versionData.publishedAt && (
                 <> Released {new Date(versionData.publishedAt).toLocaleDateString()}.</>
               )}
             </p>
             {versionData.releaseNotes && (
-              <p className="text-xs text-gray-500 mt-1 line-clamp-2">{versionData.releaseNotes}</p>
+              <p className="text-xs text-text-muted mt-1 line-clamp-2">{versionData.releaseNotes}</p>
             )}
             <div className="flex items-center gap-3 mt-2">
               <button
@@ -97,7 +113,7 @@ export default function SettingsPage() {
                 )}
               </button>
               {updateMut.isSuccess && (
-                <span className="text-xs text-gray-400">Dashboard will restart. Refresh this page in a few seconds.</span>
+                <span className="text-xs text-text-secondary">Dashboard will restart. Refresh this page in a few seconds.</span>
               )}
               {updateMut.isError && (
                 <span className="text-xs text-accent-red">{(updateMut.error as Error).message}</span>
@@ -132,7 +148,7 @@ export default function SettingsPage() {
             placeholder="http://localhost:8227"
             data-testid="input-rpc-url"
           />
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-text-muted mt-1">
             The URL of your running Fiber node's RPC server. Default is{" "}
             <span className="mono">http://localhost:8227</span>.
           </p>
@@ -190,28 +206,28 @@ export default function SettingsPage() {
 
       <div className="card space-y-3">
         <h2 className="section-title">Node Configuration</h2>
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-text-secondary">
           Node settings like alias, listening address, and CKB RPC are configured in your{" "}
-          <span className="mono text-gray-300">config.yml</span> file on the server, not here.
+          <span className="mono text-text-primary">config.yml</span> file on the server, not here.
         </p>
-        <div className="bg-bg-surface rounded-md p-3 text-sm text-gray-300 space-y-1">
-          <div>Config file: <span className="mono text-xs">~/fiber-node/config.yml</span></div>
-          <div>To apply changes: <span className="mono text-xs">sudo systemctl restart fiber-node</span></div>
+        <div className="bg-bg-surface rounded-md p-3 text-sm text-text-primary space-y-1">
+          <div>Config file: <span className="mono text-xs">{isWindows ? "%USERPROFILE%\\fiber-node\\config.yml" : "~/fiber-node/config.yml"}</span></div>
+          <div>To apply changes: <span className="mono text-xs">{isWindows ? "Restart-Service FiberNetworkNode" : "sudo systemctl restart fiber-node"}</span></div>
         </div>
       </div>
 
       <div className="card space-y-3 border-border">
         <h2 className="section-title text-accent-red">Danger Zone</h2>
-        <div className="space-y-3 text-sm text-gray-400">
-          <div className="p-3 bg-red-900/10 border border-red-800/30 rounded-md">
-            <div className="font-medium text-gray-300 mb-1">Close All Channels</div>
+        <div className="space-y-3 text-sm text-text-secondary">
+          <div className="p-3 alert-red rounded-md">
+            <div className="font-medium text-text-primary mb-1">Close All Channels</div>
             <p className="text-xs">
               Closing channels requires on-chain transactions for each one. Use the Channels tab to
               close channels individually and safely. Force-close only if a peer is permanently offline.
             </p>
           </div>
-          <div className="p-3 bg-amber-900/10 border border-amber-800/30 rounded-md">
-            <div className="font-medium text-gray-300 mb-1">Upgrade Node Binary</div>
+          <div className="p-3 alert-amber rounded-md">
+            <div className="font-medium text-text-primary mb-1">Upgrade Node Binary</div>
             <p className="text-xs">
               Before upgrading fnn, close all channels first (storage format can change between versions).
               See the setup guide for upgrade instructions.
@@ -250,8 +266,8 @@ export default function SettingsPage() {
           <h2 className="section-title mb-0">About & Support</h2>
         </div>
         <div>
-          <div className="text-sm font-semibold text-white">Fiber Node Dashboard</div>
-          <p className="text-xs text-gray-500 mt-0.5">Built by tecmeup</p>
+          <div className="text-sm font-semibold text-text-primary">Fiber Node Dashboard</div>
+          <p className="text-xs text-text-muted mt-0.5">Built by tecmeup</p>
         </div>
         <div className="flex items-center gap-3">
           <a
@@ -272,12 +288,12 @@ export default function SettingsPage() {
           </a>
         </div>
         <div>
-          <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">Support the project</div>
+          <div className="text-xs text-text-muted uppercase tracking-wider mb-2">Support the project</div>
           <div className="space-y-2">
             {SUPPORT_ADDRESSES.map(({ label, address }) => (
               <div key={label} className="flex items-center gap-2 bg-bg-surface rounded-md px-3 py-2">
-                <span className="text-xs font-medium text-gray-400 w-8 flex-shrink-0">{label}</span>
-                <span className="mono text-xs text-gray-300 truncate flex-1">{address}</span>
+                <span className="text-xs font-medium text-text-secondary w-8 flex-shrink-0">{label}</span>
+                <span className="mono text-xs text-text-primary truncate flex-1">{address}</span>
                 <CopyButton text={address} />
               </div>
             ))}
@@ -285,12 +301,12 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="text-xs text-gray-600 pt-2 flex items-center gap-3">
+      <div className="text-xs text-text-muted pt-2 flex items-center gap-3">
         <span>Fiber Dashboard {versionData?.current ?? "v1.4.3"}</span>
         <button
           onClick={() => recheckVersion()}
           disabled={versionChecking}
-          className="text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1"
+          className="text-text-muted hover:text-text-primary transition-colors flex items-center gap-1"
           title="Check for updates"
         >
           <RefreshCw size={11} className={versionChecking ? "animate-spin" : ""} />

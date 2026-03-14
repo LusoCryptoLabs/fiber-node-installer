@@ -68,9 +68,10 @@ const MAINNET_CHAIN_HASH = '0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Path to ckb-cli.exe — baked in by installer via CKB_CLI_PATH env var.
-// Fallback: three directories up from server/ (i.e. $InstallDir/ckb-cli.exe).
-const CKB_CLI_PATH = process.env.CKB_CLI_PATH ?? join(__dirname, '../../../ckb-cli.exe');
+// Path to ckb-cli — baked in by installer via CKB_CLI_PATH env var.
+// Fallback: three directories up from server/ (i.e. $InstallDir/ckb-cli[.exe]).
+const ckbCliName = process.platform === "win32" ? "ckb-cli.exe" : "ckb-cli";
+const CKB_CLI_PATH = process.env.CKB_CLI_PATH ?? join(__dirname, `../../../${ckbCliName}`);
 
 // ── Keystore decryption (Ethereum v3 format, same as ckb-cli) ────────────────
 // ckb-cli uses rpassword (ReadConsoleW) which cannot work without a real console.
@@ -190,7 +191,7 @@ function handleError(res: express.Response, err: unknown) {
 }
 
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, timestamp: Date.now(), fiberRpcUrl: FIBER_RPC_URL, startedAt: SERVER_STARTED_AT });
+  res.json({ ok: true, timestamp: Date.now(), fiberRpcUrl: FIBER_RPC_URL, startedAt: SERVER_STARTED_AT, platform: process.platform });
 });
 
 app.get("/api/node-info", async (_req, res) => {
@@ -506,10 +507,11 @@ const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/lat
 let versionCache: { data: object; fetchedAt: number } | null = null;
 const VERSION_CACHE_TTL = 30 * 60 * 1000;
 
-app.get("/api/version/check", async (_req, res) => {
+app.get("/api/version/check", async (req, res) => {
   try {
+    const force = req.query.force === "true";
     const now = Date.now();
-    if (versionCache && now - versionCache.fetchedAt < VERSION_CACHE_TTL) {
+    if (!force && versionCache && now - versionCache.fetchedAt < VERSION_CACHE_TTL) {
       res.json(versionCache.data);
       return;
     }
@@ -558,7 +560,7 @@ app.get("/api/version/check", async (_req, res) => {
 });
 
 // ── One-click update ─────────────────────────────────────────────────────────
-const INSTALL_DIR = join(__dirname, "../../.."); // e.g. C:\Users\...\fiber-node
+const INSTALL_DIR = join(__dirname, "../../.."); // e.g. ~/fiber-node
 
 app.post("/api/update", (_req, res) => {
   const isWin = process.platform === "win32";
