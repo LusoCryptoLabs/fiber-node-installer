@@ -7,8 +7,9 @@ export type HexUint64 = string; // "0x" + up to 16 hex chars
 export type HexUint128 = string; // "0x" + up to 32 hex chars
 
 // ── Enums ────────────────────────────────────────────────────────────────────
-export type Currency = 'Ckb' | 'CkbTestNet';
-export type HashAlgorithm = 'CkbHash' | 'Sha256';
+// Verified live on fnn v0.8.1: invoice address prefix and the value new_invoice accepts.
+export type Currency = 'Fibb' | 'Fibt' | 'Fibd'; // mainnet | testnet | dev
+export type HashAlgorithm = 'ckb_hash' | 'sha256';
 export type ChannelState =
   | 'NegotiatingFunding'
   | 'CollaboratingFundingTx'
@@ -19,7 +20,7 @@ export type ChannelState =
   | 'ShuttingDown'
   | 'Closed';
 export type CkbInvoiceStatus = 'Open' | 'Cancelled' | 'Expired' | 'Paid' | 'Received';
-export type PaymentStatus = 'Created' | 'InFlight' | 'Success' | 'Failed';
+export type PaymentStatus = 'Created' | 'Inflight' | 'Success' | 'Failed';
 
 // ── Node ─────────────────────────────────────────────────────────────────────
 export interface NodeInfo {
@@ -215,6 +216,8 @@ export class FiberClient {
   parseInvoice(invoice: string): Promise<ParseInvoiceResult>;
   getInvoice(payment_hash: string): Promise<GetInvoiceResult>;
   cancelInvoice(payment_hash: string): Promise<{ status: string }>;
+  /** Capture a held hold-invoice by revealing the preimage. Valid only while status is 'Received'. */
+  settleInvoice(payment_hash: string, payment_preimage: string): Promise<void>;
   sendPayment(params: SendPaymentParams): Promise<PaymentResult>;
   getPayment(payment_hash: string): Promise<PaymentResult>;
   buildRouter(params: object): Promise<BuildRouterResult>;

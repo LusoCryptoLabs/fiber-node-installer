@@ -82,6 +82,11 @@ export class FiberClient {
   parseInvoice(invoice)      { return this._call('parse_invoice', [{ invoice }]); }
   getInvoice(payment_hash)   { return this._call('get_invoice', [{ payment_hash }]); }
   cancelInvoice(payment_hash){ return this._call('cancel_invoice', [{ payment_hash }]); }
+  // Release a held (hold-invoice) payment by revealing the preimage. Only valid while status is
+  // 'Received'. This is FiberHold's capture call; it runs off-chain on the node, no lock script.
+  settleInvoice(payment_hash, payment_preimage) {
+    return this._call('settle_invoice', [{ payment_hash, payment_preimage }]);
+  }
 
   // Payments
   sendPayment(params)        { return this._call('send_payment', [params]); }
