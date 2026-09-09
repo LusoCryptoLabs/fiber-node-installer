@@ -11,8 +11,12 @@ Running a Fiber Network Node gives you a full Lightning-style payment node on th
 ### Instant, near-zero-fee payments
 Standard CKB transactions confirm in ~10 seconds. Fiber payments are **instant** and cost a fraction of a cent — no waiting, no per-transaction overhead. Once your channels are open, payments settle in milliseconds.
 
-### You earn routing fees
-Every payment that flows *through* your node earns you a small fee. The more liquidity you provide and the better your uptime, the more traffic your node attracts — passive income for keeping the network healthy.
+### You can earn routing fees, on mainnet
+Payments that flow *through* your node earn you a fee. Two things are worth knowing before you count on that.
+
+**Fees are only money on mainnet.** On testnet the node routes and settles normally, but nothing it earns is real.
+
+**And running a node is not the same as routing traffic through it.** Whether payments choose your node depends on where it sits in the network, not on how much liquidity you add or how good your uptime is. [fiber-node](https://github.com/LusoCryptoLabs/fiber-node) is the routing node behind this project, and its README covers what actually decides that, including the two pricing decisions that were made here and turned out to be wrong.
 
 ### Infrastructure you actually own
 Your keys stay on your own machine. Your node connects directly to peers. You control your liquidity, your channels, and your fees — no third-party service in between.
