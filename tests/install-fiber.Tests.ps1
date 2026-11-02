@@ -327,26 +327,26 @@ Describe 'Node alias sanitization' {
 # ---------------------------------------------------------------------------
 Describe 'Version constants' {
 
-    It 'FNN_VERSION is set and matches semver pattern' {
+    It 'FNN_VERSION is a semver tag, or the latest release with a semver fallback' {
         $ver = ($script:Ast.FindAll(
             { param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] },
             $true
         ) | Where-Object { $_.Left.Extent.Text -eq '$FNN_VERSION' } | Select-Object -First 1)
         $ver | Should -Not -BeNullOrEmpty
-        $ver.Right.Extent.Text | Should -Match "^'v\d+\.\d+\.\d+'"
+        $ver.Right.Extent.Text | Should -Match "^(Get-LatestRelease\s+'[^']+'\s+)?'v\d+\.\d+\.\d+'$"
     }
 
-    It 'CKB_CLI_VERSION is set and matches semver pattern' {
+    It 'CKB_CLI_VERSION is a semver tag, or the latest release with a semver fallback' {
         $ver = ($script:Ast.FindAll(
             { param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] },
             $true
         ) | Where-Object { $_.Left.Extent.Text -eq '$CKB_CLI_VERSION' } | Select-Object -First 1)
         $ver | Should -Not -BeNullOrEmpty
-        $ver.Right.Extent.Text | Should -Match "^'v\d+\.\d+\.\d+'"
+        $ver.Right.Extent.Text | Should -Match "^(Get-LatestRelease\s+'[^']+'\s+)?'v\d+\.\d+\.\d+'$"
     }
 
     It 'FnnUrl references the FNN_VERSION' {
-        # $FNN_VERSION appears inside a double-quoted string in FnnUrl — escape $ for regex
+        # $FNN_VERSION appears inside a double-quoted string in FnnUrl, escape $ for regex
         $script:RawContent | Should -Match '\$FNN_VERSION'
     }
 }
