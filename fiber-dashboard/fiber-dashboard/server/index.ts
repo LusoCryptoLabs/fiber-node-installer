@@ -68,7 +68,7 @@ const MAINNET_CHAIN_HASH = '0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Path to ckb-cli — baked in by installer via CKB_CLI_PATH env var.
+// Path to ckb-cli, baked in by installer via CKB_CLI_PATH env var.
 // Fallback: three directories up from server/ (i.e. $InstallDir/ckb-cli[.exe]).
 const ckbCliName = process.platform === "win32" ? "ckb-cli.exe" : "ckb-cli";
 const CKB_CLI_PATH = process.env.CKB_CLI_PATH ?? join(__dirname, `../../../${ckbCliName}`);
@@ -99,7 +99,7 @@ function decryptKeystore(keystorePath: string, password: string): string {
   // Verify MAC: keccak256(derivedKey[16:32] + ciphertext)
   const ciphertext = Buffer.from(crypto.ciphertext, 'hex');
   const macInput = Buffer.concat([derivedKey.subarray(16, 32), ciphertext]);
-  // ckb-cli uses keccak256 for MAC — use createHash('sha3-256') which is keccak256
+  // ckb-cli uses keccak256 for MAC, use createHash('sha3-256') which is keccak256
   // Actually Node.js sha3-256 is NOT keccak256. We need to check which one ckb-cli uses.
   // ckb-cli (Rust) uses tiny-keccak which is keccak256. Node's 'sha3-256' is FIPS 202.
   // They produce different results. Let's try both.
@@ -121,7 +121,7 @@ function decryptKeystore(keystorePath: string, password: string): string {
 
   // The decrypted key should be 32 bytes (secp256k1 private key) or 64 bytes (extended)
   if (privKey.length !== 32 && privKey.length !== 64) {
-    throw new Error('Wrong password or corrupted keystore — decrypted key has unexpected length');
+    throw new Error('Wrong password or corrupted keystore, decrypted key has unexpected length');
   }
 
   return '0x' + privKey.subarray(0, 32).toString('hex');
@@ -375,7 +375,7 @@ app.get("/api/wallet", async (_req, res) => {
       const balData = await balRes.json() as { result?: { capacity: string } };
       capacity = balData.result?.capacity ?? "0x0";
     } catch {
-      // L1 unreachable — return 0 and let the UI indicate stale data
+      // L1 unreachable, return 0 and let the UI indicate stale data
     }
 
     res.json({ address, capacity, isMainnet, ckbRpcUrl });
@@ -425,7 +425,7 @@ app.post("/api/wallet/transfer", async (req, res) => {
 
     const txHashMatch = output.match(/0x[0-9a-fA-F]{64}/);
     if (!txHashMatch) {
-      res.status(500).json({ error: output.trim() || "Transfer failed — no transaction hash returned" });
+      res.status(500).json({ error: output.trim() || "Transfer failed, no transaction hash returned" });
       return;
     }
 
@@ -500,7 +500,7 @@ app.delete("/api/store/:key", (req, res) => {
 
 // ── Auto-update checker ─────────────────────────────────────────────────────
 const CURRENT_VERSION = "v1.4.3";
-const GITHUB_REPO = "tecmeup123/fiber-node-installer";
+const GITHUB_REPO = "LusoCryptoLabs/fiber-node-installer";
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 
 // Cache the result for 30 minutes to avoid hitting GitHub rate limits
@@ -529,7 +529,7 @@ app.get("/api/version/check", async (req, res) => {
         current: CURRENT_VERSION,
         latest: CURRENT_VERSION,
         updateAvailable: false,
-        error: ghRes.status === 403 ? "GitHub rate limit — try again later" : `GitHub API error ${ghRes.status}`,
+        error: ghRes.status === 403 ? "GitHub rate limit, try again later" : `GitHub API error ${ghRes.status}`,
       });
       return;
     }

@@ -33,7 +33,7 @@ get_latest_release() {
 }
 
 FNN_VERSION="$(get_latest_release 'nervosnetwork/fiber' 'v0.7.1')"
-# Pin ckb-cli to v1.9.0 — only used once to generate a key; v2.0.0 changed the
+# Pin ckb-cli to v1.9.0, only used once to generate a key; v2.0.0 changed the
 # account export interface and breaks the key extraction flow below.
 CKB_CLI_VERSION="v1.9.0"
 
@@ -167,7 +167,7 @@ step() {
   bar=$(printf '%*s' "${#label}" '' | tr ' ' '─')
   echo ""
   echo -e "  ${CYAN}${bar}${RESET}"
-  echo -e "  ${CYAN}Step ${BOLD}$1${RESET}${CYAN}  —  ${BOLD}$2${RESET}"
+  echo -e "  ${CYAN}Step ${BOLD}$1${RESET}${CYAN}  ·  ${BOLD}$2${RESET}"
   echo -e "  ${CYAN}${bar}${RESET}"
   echo ""
 }
@@ -280,7 +280,7 @@ preflight() {
   echo "    7. Set up the node as a background service"
   echo "    8. Optionally install the Fiber Dashboard web UI"
   echo ""
-  echo "  Estimated time: 15–30 minutes"
+  echo "  Estimated time: 15 to 30 minutes"
   echo ""
 
   if ! confirm "Ready to begin?"; then
@@ -805,7 +805,7 @@ generate_wallet() {
   echo -e "${YELLOW}  ── Your new node address ──${RESET}"
   echo ""
 
-  # Generate account — run directly (NOT in a subshell) so password prompts
+  # Generate account, run directly (NOT in a subshell) so password prompts
   # are visible to the user.  Capture output via tee for lock_arg extraction.
   ACCOUNT_TMPFILE=$(mktemp)
   ckb-cli account new 2>&1 | tee "$ACCOUNT_TMPFILE" || true
@@ -831,7 +831,7 @@ generate_wallet() {
     ok "Detected lock_arg: $LOCK_ARG"
   fi
 
-  # Export with retry — cap at 3 attempts
+  # Export with retry, cap at 3 attempts
   # Restrict umask so intermediate files are not world-readable
   OLD_UMASK=$(umask)
   umask 077
@@ -1092,10 +1092,10 @@ install_dashboard_prompt() {
   done
 
   if [[ -z "$DASHBOARD_OUTER" ]]; then
-    info "Dashboard source not found locally — downloading from GitHub..."
+    info "Dashboard source not found locally, downloading from GitHub..."
     DASH_ZIP=$(mktemp)
     DASH_EXTRACT=$(mktemp -d)
-    DASH_URL="https://github.com/tecmeup123/fiber-node-installer/archive/refs/heads/master.zip"
+    DASH_URL="https://github.com/LusoCryptoLabs/fiber-node-installer/archive/refs/heads/master.zip"
     if curl -sSfL "$DASH_URL" -o "$DASH_ZIP" 2>/dev/null || \
        wget -qO  "$DASH_ZIP" "$DASH_URL" 2>/dev/null; then
       unzip -qo "$DASH_ZIP" -d "$DASH_EXTRACT"
@@ -1364,7 +1364,7 @@ fi
 # ── Dashboard update ───────────────────────────────────────────────
 DASH_DIR="$INSTALL_DIR/dashboard/fiber-dashboard"
 if [[ -d "$DASH_DIR" ]]; then
-    DASH_REPO="tecmeup123/fiber-node-installer"
+    DASH_REPO="LusoCryptoLabs/fiber-node-installer"
     DASH_RELEASE=$(curl -sSf "https://api.github.com/repos/$DASH_REPO/releases/latest" 2>/dev/null || true)
     DASH_LATEST=$(echo "$DASH_RELEASE" | grep '"tag_name"' | sed 's/.*"tag_name": *"\(.*\)".*/\1/')
     if [[ -n "$DASH_LATEST" ]]; then
@@ -1541,7 +1541,8 @@ main() {
   generate_helper_scripts
   first_channel_guide
   install_dashboard_prompt
-  install_auto_updater
+  # Automatic updates are off: a new fnn can change its storage format and needs fnn-migrate
+  # and a store backup first (see README).
   print_summary
 }
 

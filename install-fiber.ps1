@@ -26,7 +26,7 @@ function Get-LatestRelease([string]$repo, [string]$fallback) {
             -UseBasicParsing -TimeoutSec 8 -ErrorAction Stop
         if ($rel.tag_name) { return $rel.tag_name }
     } catch {}
-    Write-Warn "Could not fetch latest $repo release — using fallback $fallback"
+    Write-Warn "Could not fetch latest $repo release, using fallback $fallback"
     return $fallback
 }
 
@@ -80,13 +80,13 @@ $script:StepCurrent = 0
 function Show-Step {
     param([string]$Name)
     $script:StepCurrent++
-    $label = "  Step $script:StepCurrent/$script:StepTotal  —  $Name  "
+    $label = "  Step $script:StepCurrent/$script:StepTotal  ·  $Name  "
     $bar   = '─' * ($label.Length)
     Write-Host ""
     Write-Host "  $bar" -ForegroundColor DarkCyan
     Write-Host "  Step " -ForegroundColor DarkCyan -NoNewline
     Write-Host "$script:StepCurrent/$script:StepTotal" -ForegroundColor White -NoNewline
-    Write-Host "  —  " -ForegroundColor DarkCyan -NoNewline
+    Write-Host "  ·  " -ForegroundColor DarkCyan -NoNewline
     Write-Host $Name -ForegroundColor Cyan
     Write-Host "  $bar" -ForegroundColor DarkCyan
 }
@@ -198,7 +198,7 @@ function Get-NodeConfig {
         $script:VpsIp = (Read-Host "Enter your server's public IP address").Trim()
         if (-not $script:VpsIp) { Write-Warn "IP address cannot be empty." }
     }
-    Write-Host "  (Press Enter to keep the default. Do NOT type Y or N here — this is a name, not a yes/no.)" -ForegroundColor DarkGray
+    Write-Host "  (Press Enter to keep the default. Do NOT type Y or N here, this is a name, not a yes/no.)" -ForegroundColor DarkGray
     $resp = Read-Host "Choose a name for your node (visible on the network) [$NodeAlias]"
     if ($resp -match '^[yYnN]$') {
         Write-Warn "Looks like you typed Y/N. Keeping default name '$NodeAlias'."
@@ -225,9 +225,9 @@ function Install-CkbCli {
     if (Test-Path "$InstallDir\ckb-cli.exe") {
         $installedVer = (& "$InstallDir\ckb-cli.exe" --version 2>&1 | Select-Object -First 1) -replace '^ckb-cli\s+', ''
         if ($installedVer -and $installedVer.Trim().StartsWith($CKB_CLI_VERSION.TrimStart('v'))) {
-            Write-Ok "ckb-cli $CKB_CLI_VERSION already installed — skipping download."; return
+            Write-Ok "ckb-cli $CKB_CLI_VERSION already installed, skipping download."; return
         }
-        Write-Info "ckb-cli version mismatch (have: $($installedVer.Trim()), want: $CKB_CLI_VERSION) — re-downloading..."
+        Write-Info "ckb-cli version mismatch (have: $($installedVer.Trim()), want: $CKB_CLI_VERSION), re-downloading..."
     }
     Write-Info "Downloading ckb-cli $CKB_CLI_VERSION..."
     New-Item -ItemType Directory -Force -Path $InstallDir\temp | Out-Null
@@ -253,9 +253,9 @@ function Install-Fnn {
     if (Test-Path "$InstallDir\fnn.exe") {
         $installedVer = (& "$InstallDir\fnn.exe" --version 2>&1 | Select-Object -First 1) -replace '^fnn\s+', ''
         if ($installedVer -and $installedVer.Trim().StartsWith($FNN_VERSION.TrimStart('v'))) {
-            Write-Ok "fnn $FNN_VERSION already installed — skipping download."; return
+            Write-Ok "fnn $FNN_VERSION already installed, skipping download."; return
         }
-        Write-Info "fnn version mismatch (have: $($installedVer.Trim()), want: $FNN_VERSION) — re-downloading..."
+        Write-Info "fnn version mismatch (have: $($installedVer.Trim()), want: $FNN_VERSION), re-downloading..."
         # Stop any running node before replacing the binary (avoids file-in-use error)
         $svc = Get-Service 'FiberNetworkNode' -ErrorAction SilentlyContinue
         if ($svc -and $svc.Status -ne 'Stopped') {
@@ -407,7 +407,7 @@ services:
 }
 
 function Write-Config {
-    # Stop any running node before overwriting config — prevents file-lock conflicts on re-run
+    # Stop any running node before overwriting config, prevents file-lock conflicts on re-run
     if (Get-Service 'FiberNetworkNode' -ErrorAction SilentlyContinue) {
         Stop-Service 'FiberNetworkNode' -Force -ErrorAction SilentlyContinue
         Write-Info "Node service stopped for config update."
@@ -553,7 +553,7 @@ function Generate-Wallet {
             exit 1
         }
 
-        # Export with retry — cap at 3 attempts to avoid endless loops on wrong password
+        # Export with retry, cap at 3 attempts to avoid endless loops on wrong password
         $exported = $false
         $attempts = 0
         do {
@@ -787,7 +787,7 @@ function Register-AutoStart {
             }
         } catch {
             Write-Warn "Could not download NSSM: $_"
-            # nssm.cc is sometimes unavailable — try winget as a fallback
+            # nssm.cc is sometimes unavailable, try winget as a fallback
             if (Get-Command winget -ErrorAction SilentlyContinue) {
                 Write-Info "Trying winget as fallback for NSSM..."
                 try {
@@ -890,8 +890,8 @@ function Install-Dashboard {
     $dashboardInner = "$dashboardOuter\fiber-dashboard"
 
     if (-not (Test-Path "$dashboardInner\package.json")) {
-        Write-Info "Dashboard source not found locally — downloading from GitHub..."
-        $zipUrl  = "https://github.com/tecmeup123/fiber-node-installer/archive/refs/heads/master.zip"
+        Write-Info "Dashboard source not found locally, downloading from GitHub..."
+        $zipUrl  = "https://github.com/LusoCryptoLabs/fiber-node-installer/archive/refs/heads/master.zip"
         $zipTemp = "$env:TEMP\fiber-installer-master.zip"
         $extTemp = "$env:TEMP\fiber-installer-master"
         try {
@@ -1129,7 +1129,7 @@ if (`$svc) {
 # ── Dashboard update ───────────────────────────────────────────────
 `$dashDir = "`$InstallDir\dashboard\fiber-dashboard"
 if (Test-Path `$dashDir) {
-    `$dashRepo = 'tecmeup123/fiber-node-installer'
+    `$dashRepo = 'LusoCryptoLabs/fiber-node-installer'
     try {
         `$dashRelease = Invoke-RestMethod -UseBasicParsing -Uri "https://api.github.com/repos/`$dashRepo/releases/latest" -TimeoutSec 15
         `$dashLatest  = `$dashRelease.tag_name
@@ -1315,7 +1315,8 @@ Show-Step 'Node health check';   Test-NodeStartup
 Show-Step 'Dashboard (optional)'; Install-Dashboard
 
 Register-AutoStart
-Install-AutoUpdater
+# Automatic updates are off: a new fnn can change its storage format and needs fnn-migrate
+# and a store backup first (see README).
 
 Write-Host "`nInstallation complete!" -ForegroundColor Green
 Write-Host ""
@@ -1326,12 +1327,12 @@ if ($script:FundingAddress) {
     Write-Host "============================================================" -ForegroundColor Green
     Write-Host ""
 }
-Write-Host "  Terminal 1 — start the node:" -ForegroundColor Yellow
+Write-Host "  Terminal 1, start the node:" -ForegroundColor Yellow
 Write-Host "    cd $InstallDir" -ForegroundColor Cyan
 Write-Host "    .\start.ps1" -ForegroundColor Cyan
 Write-Host ""
 if ($script:DashboardInstalled -or (Test-Path "$InstallDir\start-dashboard.ps1")) {
-    Write-Host "  Terminal 2 — start the dashboard:" -ForegroundColor Yellow
+    Write-Host "  Terminal 2, start the dashboard:" -ForegroundColor Yellow
     Write-Host "    cd $InstallDir" -ForegroundColor Cyan
     Write-Host "    .\start-dashboard.ps1" -ForegroundColor Cyan
     Write-Host "    Then open http://localhost:3333 in your browser." -ForegroundColor Cyan
