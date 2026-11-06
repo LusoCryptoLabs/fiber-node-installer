@@ -279,7 +279,7 @@ export default function SettingsPage() {
             <span className="font-bold">𝕏</span> Follow on X
           </a>
           <a
-            href="https://github.com/tecmeup123/fiber-node-installer"
+            href="https://github.com/LusoCryptoLabs/fiber-node-installer"
             target="_blank"
             rel="noopener noreferrer"
             className="btn-secondary text-xs flex items-center gap-1.5"
